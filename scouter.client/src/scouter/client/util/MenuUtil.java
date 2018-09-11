@@ -17,9 +17,6 @@
  */
 package scouter.client.util;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IMenuCreator;
 import org.eclipse.jface.action.IMenuListener;
@@ -28,21 +25,29 @@ import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
-
 import scouter.client.Images;
 import scouter.client.actions.OpenActiveServiceListAction;
 import scouter.client.actions.OpenActiveSpeedAction;
 import scouter.client.actions.OpenEQViewAction;
-import scouter.client.actions.OpenServiceGroupAction;
+import scouter.client.actions.OpenServiceGroupElapsedAction;
+import scouter.client.actions.OpenServiceGroupTPSAction;
+import scouter.client.actions.OpenVerticalEQViewAction;
 import scouter.client.actions.SetColorAction;
+import scouter.client.batch.actions.OpenCxtmenuBatchActiveListAction;
+import scouter.client.batch.actions.OpenCxtmenuBatchHistoryAction;
 import scouter.client.configuration.actions.DefineObjectTypeAction;
 import scouter.client.configuration.actions.OpenAgentConfigureAction;
 import scouter.client.constants.MenuStr;
@@ -69,8 +74,11 @@ import scouter.client.counter.actions.OpenPastLongDateTotalAction;
 import scouter.client.counter.actions.OpenPastTimeAllAction;
 import scouter.client.counter.actions.OpenPastTimeTotalAction;
 import scouter.client.counter.actions.OpenPastTimeViewAction;
+import scouter.client.counter.actions.OpenRTPairAllAction;
+import scouter.client.counter.actions.OpenRTPairAllAction2;
 import scouter.client.counter.actions.OpenRealTimeAllAction;
 import scouter.client.counter.actions.OpenRealTimeMultiAction;
+import scouter.client.counter.actions.OpenRealTimeStackAction;
 import scouter.client.counter.actions.OpenRealTimeTotalAction;
 import scouter.client.counter.actions.OpenRealTimeViewAction;
 import scouter.client.counter.actions.OpenSummaryAction;
@@ -98,6 +106,7 @@ import scouter.client.heapdump.actions.HeapDumpListAction;
 import scouter.client.host.actions.OpenDiskUsageAction;
 import scouter.client.host.actions.OpenTopAction;
 import scouter.client.maria.actions.OpenDbRealtimeWaitCountAction;
+import scouter.client.model.AgentModelThread;
 import scouter.client.model.AgentObject;
 import scouter.client.model.TextProxy;
 import scouter.client.server.GroupPolicyConstants;
@@ -109,9 +118,14 @@ import scouter.client.stack.actions.TurnOnStackAction;
 import scouter.client.xlog.actions.OpenXLogLoadTimeAction;
 import scouter.client.xlog.actions.OpenXLogRealTimeAction;
 import scouter.lang.Counter;
+import scouter.lang.ObjectType;
 import scouter.lang.counters.CounterConstants;
 import scouter.lang.counters.CounterEngine;
 import scouter.util.DateUtil;
+import scouter.util.StringUtil;
+
+import java.util.ArrayList;
+import java.util.HashMap;
 
 public class MenuUtil implements IMenuCreator{
 
@@ -205,10 +219,11 @@ public class MenuUtil implements IMenuCreator{
 	}
 	
 	public static HashMap<String, Action> getCounterActionList(IWorkbenchWindow window, CounterEngine counterEngine, int serverId){
-		
 		HashMap<String, Action> actions = new HashMap<String, Action>();
-		
 		ArrayList<String> objTypeAndCounter = counterEngine.getAllCounterList();
+		if (objTypeAndCounter == null || objTypeAndCounter.isEmpty()) {
+			return actions;
+		}
 		for (int inx = 0; inx < objTypeAndCounter.size(); inx++) {
 			String[] splitedKey = objTypeAndCounter.get(inx).split(":");
 			String objType = splitedKey[0];
@@ -219,77 +234,6 @@ public class MenuUtil implements IMenuCreator{
 					new OpenRealTimeAllAction(window, label, objType, counterName, Images
 							.getCounterImage(objType, counterName, serverId), serverId));
 		}
-		
-		ArrayList<String> objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.TOTAL_ACTIVE_SPEED);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objTypeDisplay = splitedKey[0];
-			String objType = splitedKey[1];
-			actions.put(objType + ":" + CounterConstants.TOTAL_ACTIVE_SPEED, new OpenActiveSpeedAction(window,
-					objTypeDisplay, objType, Images.getObjectIcon(objType, true, serverId), serverId));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.ACTIVE_EQ);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objType = splitedKey[1];
-			actions.put(objType + ":" + CounterConstants.ACTIVE_EQ, new OpenEQViewAction(window, serverId, objType));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.ACTIVE_THREAD_LIST);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objTypeDisplay = splitedKey[0];
-			String objType = splitedKey[1];
-			actions.put(objType + ":" + CounterConstants.ACTIVE_THREAD_LIST, new OpenActiveServiceListAction(window,
-					objTypeDisplay, objType, Images.getObjectIcon(objType, true, serverId), serverId));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.TRANX_REALTIME);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objType = splitedKey[1];
-			actions.put(
-					objType + ":" + CounterConstants.TRANX_REALTIME,
-					new OpenXLogRealTimeAction(window, MenuStr.XLOG, objType, Images.star, serverId));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.TODAY_SERVICE_COUNT);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objType = splitedKey[1];
-			actions.put(
-					objType + ":" + CounterConstants.TODAY_SERVICE_COUNT,
-					new OpenTodayServiceCountAction(window, MenuStr.SERVICE_COUNT, objType, CounterConstants.WAS_SERVICE_COUNT, Images.bar, serverId));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.SERVICE_GROUP);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objType = splitedKey[1];
-			actions.put(
-					objType + ":" + CounterConstants.SERVICE_GROUP,
-					new OpenServiceGroupAction(window, serverId, objType));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.UNIQUE_VISITOR);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objType = splitedKey[1];
-			actions.put(
-					objType + ":" + CounterConstants.UNIQUE_VISITOR,
-					new OpenUniqueTotalVisitorAction(window, serverId, objType));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.SERVICE_SUMMARY);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objType = splitedKey[1];
-			actions.put(
-					objType + ":" + CounterConstants.SERVICE_SUMMARY,
-					new OpenTypeSummaryAction(window, serverId, objType));
-		}
-		
 		return actions;
 	}
 	
@@ -340,28 +284,6 @@ public class MenuUtil implements IMenuCreator{
 					new OpenPastLongDateTotalAction(window, label, objType,
 							counterName, Images.getCounterImage(objType, counterName, serverId), curdate, curdate, serverId));
 		}
-		
-		ArrayList<String> objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.TRANX_REALTIME);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objTypeDisplay = splitedKey[0];
-			String objType = splitedKey[1];
-			actions.put(
-					objType + ":" + CounterConstants.TRANX_REALTIME,
-					new OpenXLogLoadTimeAction(window, objTypeDisplay, objType, Images.getObjectIcon(
-							objType, true, serverId), serverId, st, et));
-		}
-		
-		objTypeList = counterEngine.getObjTypeListWithDisplay(CounterConstants.TODAY_SERVICE_COUNT);
-		for (int inx = 0; inx < objTypeList.size(); inx++) {
-			String[] splitedKey = objTypeList.get(inx).split(":");
-			String objTypeDisplay = splitedKey[0];
-			String objType = splitedKey[1];
-			actions.put(
-					objType + ":" + CounterConstants.TODAY_SERVICE_COUNT,
-					new OpenDailyServiceCountAction(window, objTypeDisplay, objType, CounterConstants.WAS_SERVICE_COUNT, Images.getObjectIcon(
-							objType, true, serverId), serverId, curdate));
-		}
 		return actions;
 	}
 	
@@ -377,7 +299,7 @@ public class MenuUtil implements IMenuCreator{
     	MenuManager performanceCounter = new MenuManager(MenuStr.PERFORMANCE_COUNTER,  ImageUtil.getImageDescriptor(Images.CTXMENU_RTC), MenuStr.PERFORMANCE_COUNTER_ID);
     	mgr.add(performanceCounter);
     	
-    	if (counterNames != null) {
+    	if (object.isAlive() && counterNames != null) {
 	    	for(int inx = 0 ; inx < counterNames.length ; inx++){
 	    		String counter = counterNames[inx];
 	    		String counterDisplay = counterEngine.getCounterDisplayName(objType, counter);
@@ -389,6 +311,10 @@ public class MenuUtil implements IMenuCreator{
     		performanceCounter.add(new Separator());
     		performanceCounter.add(new OpenUniqueVisitorAction(win, serverId, objHash));
     		performanceCounter.add(new OpenSummaryAction(win, serverId, objHash));
+    	} else if (counterEngine.isChildOf(objType, CounterConstants.FAMILY_HOST)) {
+    		performanceCounter.add(new Separator());
+    		performanceCounter.add(new OpenRealTimeStackAction(win, "Sys/User CPU", serverId, objHash, 
+    				new String[] {CounterConstants.HOST_SYSCPU, CounterConstants.HOST_USERCPU}));
     	} else if (counterEngine.isChildOf(objType, CounterConstants.FAMILY_MARIA)) {
     		performanceCounter.add(new Separator());
     		performanceCounter.add(new OpenRealTimeMultiAction(win, "Opened Tables", serverId, objHash, objType
@@ -454,6 +380,12 @@ public class MenuUtil implements IMenuCreator{
 				mgr.add(new Separator());
 				if (server.isAllowAction(GroupPolicyConstants.ALLOW_CONFIGURE))
 					mgr.add(new OpenAgentConfigureAction(win, MenuStr.CONFIGURE, objHash, serverId));
+			} else if (counterEngine.isChildOf(objType, CounterConstants.FAMILY_BATCH)) {
+				performanceCounter.add(new OpenCxtmenuBatchHistoryAction(win, MenuStr.BATCH_HISTORY, objHash, serverId));
+				mgr.add(new Separator());
+				if (server.isAllowAction(GroupPolicyConstants.ALLOW_CONFIGURE))
+					mgr.add(new OpenAgentConfigureAction(win, MenuStr.CONFIGURE, objHash, serverId));
+				performanceSnapshot.add(new OpenCxtmenuBatchActiveListAction(win, MenuStr.BATCH_ACTIVE_LIST, objHash, objType, serverId));
 			} 
     	}
     	if (server.isAllowAction(GroupPolicyConstants.ALLOW_DEFINEOBJTYPE)) {
@@ -471,13 +403,16 @@ public class MenuUtil implements IMenuCreator{
 		}
 	}
 	
-	public static void createCounterContextMenu(final String id, Control control, final int serverId, final String objType, final String counter) {
+	public static void createCounterContextMenu(final String id, Control control, final int serverId, final String objType, final String counter, long from, long to) {
 		MenuManager mgr = new MenuManager(); 
 		mgr.setRemoveAllWhenShown(true);
 		final CounterEngine counterEngine = ServerManager.getInstance().getServer(serverId).getCounterEngine();
-		final Counter counterObj = counterEngine.getObjectType(objType).getFamily().getCounter(counter);
+		ObjectType objectType = counterEngine.getObjectType(objType);
+		if (objectType == null) return;
+		final Counter counterObj = objectType.getCounter(counter);
 		mgr.addMenuListener(new IMenuListener() {
 			public void menuAboutToShow(IMenuManager mgr) {
+				if (mgr == null) return;
 				IWorkbenchWindow win = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
 				if (counterObj.isAll()) {
 					Action act = new OpenRealTimeAllAction(win, "Current All", objType, counter, Images.all, serverId);
@@ -536,12 +471,59 @@ public class MenuUtil implements IMenuCreator{
 					}
 					mgr.add(act);
 				}
+				mgr.add(new Separator());
+
+				Action actOutgoing = new Action("Open in 3rd-party UI") {
+					@Override
+					public void run() {
+						long _from = from != 0 ? from : System.currentTimeMillis() - DateUtil.MILLIS_PER_FIVE_MINUTE;
+						long _to = from != 0 ? to : System.currentTimeMillis();
+						Program.launch(makeExternalUrl(serverId, objType, _from, _to));
+					}
+				};
+				mgr.add(actOutgoing);
+
+				Action actOutgoingClip = new Action("clipboard a link for 3rd-party UI") {
+					@Override
+					public void run() {
+						long _from = from != 0 ? from : System.currentTimeMillis() - DateUtil.MILLIS_PER_FIVE_MINUTE;
+						long _to = from != 0 ? to : System.currentTimeMillis();
+
+						Display display = Display.getCurrent();
+						if (display == null) display = Display.getDefault();
+
+						Clipboard clipboard = new Clipboard(display);
+						String linkUrl = makeExternalUrl(serverId, objType, _from, _to);
+						clipboard.setContents(new String[]{linkUrl}, new Transfer[]{TextTransfer.getInstance()});
+						clipboard.dispose();
+					}
+				};
+				mgr.add(actOutgoingClip);
+
 			}
 		});
 		Menu menu = mgr.createContextMenu(control); 
 		control.setMenu(menu); 
 	}
-	
+
+	private static String makeExternalUrl(int serverId, String objType, long from, long to) {
+		Server server = ServerManager.getInstance().getServer(serverId);
+		String linkName = server.getExtLinkName();
+		String linkUrl = server.getExtLinkUrlPattern();
+
+		String objHashes = AgentModelThread.getInstance().getLiveObjectHashString(serverId, objType);
+		if (StringUtil.isEmpty(objHashes)) {
+			return "";
+		}
+
+		linkUrl = linkUrl.replace("$[objHashes]", objHashes);
+		linkUrl = linkUrl.replace("$[from]", String.valueOf(from));
+		linkUrl = linkUrl.replace("$[to]", String.valueOf(to));
+		linkUrl = linkUrl.replace("$[objType]", objType);
+
+		return linkUrl;
+	}
+
 	public static void createCounterContextMenu(final String id, Control control, final int serverId, final int objHash, final String objType, final String counter) {
 		MenuManager mgr = new MenuManager(); 
 		mgr.setRemoveAllWhenShown(true);
@@ -574,5 +556,38 @@ public class MenuUtil implements IMenuCreator{
 		});
 		Menu menu = mgr.createContextMenu(control); 
 		control.setMenu(menu); 
+	}
+	
+	public static void addObjTypeSpecialMenu(IWorkbenchWindow win, IMenuManager mgr, int serverId, String objType, CounterEngine counterEngine) {
+		if (counterEngine.isChildOf(objType, CounterConstants.FAMILY_JAVAEE)) {
+			mgr.add(new Separator());
+			mgr.add(new OpenRTPairAllAction(win, "Heap Memory", serverId, objType, CounterConstants.JAVA_HEAP_TOT_USAGE));
+			mgr.add(new OpenEQViewAction(win, serverId, objType));
+			mgr.add(new OpenVerticalEQViewAction(win, serverId, objType));
+			mgr.add(new OpenActiveServiceListAction(win, objType, Images.thread, serverId));
+			mgr.add(new OpenActiveSpeedAction(win,objType, Images.TYPE_ACTSPEED, serverId));
+			mgr.add(new OpenXLogRealTimeAction(win, MenuStr.XLOG, objType, Images.star, serverId));
+			mgr.add(new OpenTodayServiceCountAction(win, MenuStr.SERVICE_COUNT, objType, CounterConstants.WAS_SERVICE_COUNT, Images.bar, serverId));
+			MenuManager serviceGroupMgr = new MenuManager("Serivce Group", ImageUtil.getImageDescriptor(Images.sum), "scouter.menu.id.javee.servicegroup");
+			mgr.add(serviceGroupMgr);
+			serviceGroupMgr.add(new OpenServiceGroupTPSAction(win, serverId, objType));
+			serviceGroupMgr.add(new OpenServiceGroupElapsedAction(win, serverId, objType));
+			mgr.add(new OpenUniqueTotalVisitorAction(win, serverId, objType));
+			mgr.add(new OpenTypeSummaryAction(win, serverId, objType));
+			mgr.add(new OpenRTPairAllAction(win, "File Descriptor", serverId, objType, CounterConstants.JAVA_FD_USAGE));
+		} else if (counterEngine.isChildOf(objType, CounterConstants.FAMILY_DATASOURCE)) {
+			mgr.add(new Separator());
+			mgr.add(new OpenRTPairAllAction2(win, "Pool Chart", serverId, objType, CounterConstants.DATASOURCE_CONN_MAX, CounterConstants.DATASOURCE_CONN_ACTIVE));
+		}
+	}
+	
+	public static void addPastObjTypeSpecialMenu(IWorkbenchWindow win, IMenuManager mgr, int serverId, String objType, CounterEngine counterEngine, String date) {
+		long st = DateUtil.yyyymmdd(date);
+		long et = st + DateUtil.MILLIS_PER_FIVE_MINUTE;
+		if (counterEngine.isChildOf(objType, CounterConstants.FAMILY_JAVAEE)) {
+			mgr.add(new Separator());
+			mgr.add(new OpenXLogLoadTimeAction(win, objType, Images.transrealtime, serverId, st, et));
+			mgr.add(new OpenDailyServiceCountAction(win, objType, CounterConstants.WAS_SERVICE_COUNT, Images.TYPE_SERVICE_COUNT, serverId, date));
+		}
 	}
 }

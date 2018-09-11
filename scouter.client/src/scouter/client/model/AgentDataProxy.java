@@ -17,8 +17,6 @@
  */
 package scouter.client.model;
 
-import java.util.List;
-
 import scouter.client.net.TcpProxy;
 import scouter.client.server.Server;
 import scouter.client.server.ServerManager;
@@ -26,6 +24,8 @@ import scouter.client.util.ConsoleProxy;
 import scouter.lang.pack.MapPack;
 import scouter.lang.pack.Pack;
 import scouter.net.RequestCmd;
+
+import java.util.List;
 
 public class AgentDataProxy {
 
@@ -60,10 +60,27 @@ public class AgentDataProxy {
 		return null;
 	}
 
-	public static MapPack getThreadDetail(int objHash, long id, int serverId) {
+	public static List<Pack> getBatchActiveList(String objType, int objHash, int serverId) {
+		MapPack param = new MapPack();
+		param.put("objType", objType);
+		param.put("objHash", objHash);
+
+		TcpProxy tcp = TcpProxy.getTcpProxy(serverId);
+		try {
+			return tcp.process(RequestCmd.OBJECT_BATCH_ACTIVE_LIST, param);
+		} catch (Exception e) {
+			ConsoleProxy.errorSafe(e.toString());
+		} finally {
+			TcpProxy.putTcpProxy(tcp);
+		}
+		return null;
+	}
+	
+	public static MapPack getThreadDetail(int objHash, long threadId, long txid, int serverId) {
 		MapPack param = new MapPack();
 		param.put("objHash", objHash);
-		param.put("id", id);
+		param.put("id", threadId);
+		param.put("txid", txid);
 
 		TcpProxy tcp = TcpProxy.getTcpProxy(serverId);
 		try {

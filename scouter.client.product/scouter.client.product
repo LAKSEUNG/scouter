@@ -14,11 +14,22 @@
    </configIni>
 
    <launcherArgs>
-      <vmArgs>-Xms128m
--Xmx512m
--XX:+UseParallelGC
--XX:PermSize=64M
--XX:MaxPermSize=128M</vmArgs>
+      <programArgsLin>-data
+@user.home/.scouter
+      </programArgsLin>
+      <programArgsMac>-data
+@user.home/.scouter
+      </programArgsMac>
+      <programArgsWin>-data
+@user.home/scouter
+      </programArgsWin>
+      <vmArgs>-XX:+IgnoreUnrecognizedVMOptions
+--add-modules=java.se.ee
+-Xms128m
+-Xmx768m
+-XX:+UseG1GC
+-Dosgi.requiredJavaVersion=1.8
+      </vmArgs>
       <vmArgsMac>-XstartOnFirstThread -Dorg.eclipse.swt.internal.carbon.smallFonts
       </vmArgsMac>
    </launcherArgs>
@@ -40,6 +51,7 @@
       </win>
    </launcher>
 
+
    <vm>
    </vm>
 
@@ -49,11 +61,20 @@
    <features>
       <feature id="org.eclipse.rcp"/>
       <feature id="scouter.client.feature"/>
+      <feature id="org.eclipse.emf.ecore"/>
+      <feature id="org.eclipse.emf.common"/>
    </features>
 
    <configurations>
       <plugin id="org.eclipse.core.runtime" autoStart="true" startLevel="2" />
       <plugin id="org.eclipse.equinox.ds" autoStart="true" startLevel="2" />
    </configurations>
+
+   <preferencesInfo>
+      <targetfile overwrite="false"/>
+   </preferencesInfo>
+
+   <cssInfo>
+   </cssInfo>
 
 </product>

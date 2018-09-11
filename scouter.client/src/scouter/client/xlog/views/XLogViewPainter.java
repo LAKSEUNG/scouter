@@ -17,9 +17,6 @@
  */
 package scouter.client.xlog.views;
 
-import java.util.Date;
-import java.util.Enumeration;
-
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Color;
@@ -27,7 +24,6 @@ import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Display;
-
 import scouter.client.Images;
 import scouter.client.model.TextProxy;
 import scouter.client.model.XLogData;
@@ -44,10 +40,17 @@ import scouter.client.xlog.XLogYAxisEnum;
 import scouter.lang.pack.XLogPack;
 import scouter.util.DateUtil;
 import scouter.util.FormatUtil;
+import scouter.util.HashUtil;
 import scouter.util.IPUtil;
 import scouter.util.LongKeyLinkedMap;
+import scouter.util.Pair;
 import scouter.util.StrMatch;
 import scouter.util.StringUtil;
+
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
+import java.util.Enumeration;
 
 public class XLogViewPainter {
 	public static Color color_black = new Color(null, 0, 0, 0);
@@ -62,6 +65,10 @@ public class XLogViewPainter {
 	public long originalRange = xTimeRange;
 	private double yValueMax;
 	private double yValueMin = 0;
+	private boolean viewIsInAdditionalDataLoading = false;
+
+	public long lastDrawTimeStart = 0L;
+	public long lastDrawTimeEnd = 0L;
 
 	private XLogViewMouse mouse;
 	private PointMap pointMap = new PointMap();
@@ -79,6 +86,14 @@ public class XLogViewPainter {
 	public StrMatch objNameMat;
 	public StrMatch serviceMat;
 	public StrMatch ipMat;
+	public Pair<Long, Long> startFromToMat;
+	public StrMatch loginMat;
+	public StrMatch descMat;
+	public StrMatch text1Mat;
+	public StrMatch text2Mat;
+	public StrMatch text3Mat;
+	public StrMatch text4Mat;
+	public StrMatch text5Mat;
 	public StrMatch userAgentMat;
 	
 	public String yyyymmdd;
@@ -106,7 +121,11 @@ public class XLogViewPainter {
 //		}
 		this.originalRange = this.xTimeRange = range;
 	}
-	
+
+	public void setViewIsInAdditionalDataLoading(boolean b) {
+		this.viewIsInAdditionalDataLoading = b;
+	}
+
 	public long getTimeRange() {
 		return this.xTimeRange;
 	}
@@ -157,10 +176,10 @@ public class XLogViewPainter {
 			onGoing = false;
 		}
 	}
-	
+
 	int chart_x;
 	long paintedEndTime;
-	
+
 	public long getLastTime() {
 		return paintedEndTime;
 	}
@@ -252,7 +271,10 @@ public class XLogViewPainter {
 				gc.drawString(s, x - 25, chart_y + chart_h + 5 + 5);
 			}
 		}
-		
+
+		lastDrawTimeStart = time_start;
+		lastDrawTimeEnd = time_end;
+
 		drawXPerfData(gc, time_start, time_end, chart_x, chart_y, chart_w, chart_h);
 		drawChartBorder(gc, chart_x, chart_y, chart_w, chart_h);
 		drawYaxisDescription(gc, chart_x, chart_y);
@@ -305,21 +327,28 @@ public class XLogViewPainter {
 	public void drawSelectArea(GC gc) {
 		if (mouse.x1 >= 0 && mouse.y1 >= 0) {
 			if (mouse.x2 + mouse.y2 > 0) {
-				gc.setLineWidth(2);
+				Color color = null;
 				switch (mouse.mode) {
 				case LIST_XLOG:
-					gc.setForeground(XLogViewPainter.color_blue);
+					color = XLogViewPainter.color_blue;
+					
 					break;
 				case ZOOM_AREA:
-					gc.setForeground(XLogViewPainter.color_red);
+					color = XLogViewPainter.color_red;
 					break;
 				default:
-					gc.setForeground(XLogViewPainter.color_blue);
 					break;
 				}
-				gc.setLineStyle(SWT.LINE_DASHDOT);
-
-				gc.drawRectangle(mouse.x1, mouse.y1, mouse.x2 - mouse.x1, mouse.y2 - mouse.y1);
+				if (color != null) {
+					gc.setBackground(color);
+					gc.setAlpha(15);
+					gc.setLineStyle(SWT.LINE_SOLID);
+					gc.fillRectangle(mouse.x1, mouse.y1, mouse.x2 - mouse.x1, mouse.y2 - mouse.y1);
+					gc.setAlpha(150);
+					gc.setLineWidth(1);
+					gc.setForeground(color);
+					gc.drawRectangle(mouse.x1, mouse.y1, mouse.x2 - mouse.x1, mouse.y2 - mouse.y1);
+				}
 			}
 		}
 	}
@@ -393,9 +422,12 @@ public class XLogViewPainter {
 	private void drawXPerfData(GC gc, long time_start, long time_end, int chart_x,
 			int chart_y, int chart_w, int chart_h) {
 		count = 0;
-		if (xLogPerfData.size() == 0)
+		if (xLogPerfData.size() == 0) {
 			return;
-		removeOutsidePerfData(time_start, time_end);
+		}
+		if (viewIsInAdditionalDataLoading == false) {
+			removeOutsidePerfData(time_start - (DateUtil.MILLIS_PER_SECOND * 10), time_end);
+		}
 		Enumeration<XLogData> en = xLogPerfData.values();
 		while (en.hasMoreElements()) {
 			XLogData d = en.nextElement();
@@ -464,10 +496,10 @@ public class XLogViewPainter {
 						}
 						break;
 					case HEAP_USED:
-						if ((double) d.p.bytes / 1024.0d >= yValueMax) {
+						if (d.p.kbytes >= yValueMax) {
 							value = -1;
 						} else {
-							value = d.p.bytes / 1024.0d;
+							value = d.p.kbytes;
 						}
 						break;
 					default:
@@ -491,11 +523,11 @@ public class XLogViewPainter {
 						if (d.p.error != 0) { 
 //							gc.setForeground(ColorUtil.getInstance().getColor("red"));
 //							gc.drawString(MARK, d.x, d.y, true);
-							gc.drawImage(dotImage.getXPErrorImage(), d.x, d.y);
+							gc.drawImage(dotImage.getXPErrorImage(d.p.xType), d.x, d.y);
 						} else {
 //							gc.setForeground(AgentColorManager.getInstance().getColor(d.p.objHash));
 //							gc.drawString(MARK, d.x, d.y, true);
-							gc.drawImage(dotImage.getXPImage(d.p.objHash), d.x, d.y);
+							gc.drawImage(dotImage.getXPImage(d.p.objHash, d.p.xType), d.x, d.y);
 						}
 					} catch (Throwable t) {
 					}
@@ -583,10 +615,11 @@ public class XLogViewPainter {
 		if (zoomMode) {
 			return;
 		}
-		long time_end = (this.endTime > 0 ? this.endTime : TimeUtil.getCurrentTime()) + moveWidth ;
+		long time_current = TimeUtil.getCurrentTime(serverId);
+		long time_end = (this.endTime > 0 ? this.endTime : time_current) + moveWidth ;
 		long time_start = time_end - xTimeRange;
 		
-		if (time_end > TimeUtil.getCurrentTime()) {
+		if (time_end > time_current) {
 			moveWidth -= DateUtil.MILLIS_PER_SECOND * 10;
 			return;
 		}
@@ -597,6 +630,14 @@ public class XLogViewPainter {
 		return isObjNameFilterOk(d)
 				&& isServiceFilterOk(d)
 				&& isIpFilterOk(d.p)
+				&& isStartTimeFilterOk(d.p)
+				&& isLoginFilterOk(d)
+				&& isDescFilterOk(d)
+				&& isText1FilterOk(d)
+				&& isText2FilterOk(d)
+				&& isText3FilterOk(d)
+				&& isText4FilterOk(d)
+				&& isText5FilterOk(d)
 				&& isUserAgentFilterOk(d)
 				&& isErrorFilterOk(d.p)
 				&& isApicallFilterOk(d.p)
@@ -607,16 +648,25 @@ public class XLogViewPainter {
 		if (StringUtil.isEmpty(filterStatus.objName)) {
 			return true;
 		}
-		String objName = TextProxy.object.getLoadText(yyyymmdd, d.p.objHash, d.serverId);
-		return objNameMat.include(objName);
+		if (objNameMat.getComp() == StrMatch.COMP.EQU) {
+			return d.p.objHash == HashUtil.hash(objNameMat.getPattern());
+		} else {
+			String objName = TextProxy.object.getLoadText(yyyymmdd, d.p.objHash, d.serverId);
+			return objNameMat.include(objName);
+		}
 	}
 	
 	public boolean isServiceFilterOk(XLogData d) {
 		if (StringUtil.isEmpty(filterStatus.service)) {
 			return true;
 		}
-		String serviceName = TextProxy.service.getLoadText(yyyymmdd, d.p.service, d.serverId);
-		return serviceMat.include(serviceName);
+
+		if (serviceMat.getComp() == StrMatch.COMP.EQU) {
+			return d.p.service == HashUtil.hash(serviceMat.getPattern());
+		} else {
+			String serviceName = TextProxy.service.getLoadText(yyyymmdd, d.p.service, d.serverId);
+			return serviceMat.include(serviceName);
+		}
 	}
 	
 	public boolean isIpFilterOk(XLogPack p) {
@@ -626,13 +676,84 @@ public class XLogViewPainter {
 		String value = IPUtil.toString(p.ipaddr);
 		return ipMat.include(value);
 	}
+
+	public boolean isStartTimeFilterOk(XLogPack p) {
+		if (StringUtil.isEmpty(filterStatus.startHmsFrom) || StringUtil.isEmpty(filterStatus.startHmsTo)) {
+			return true;
+		}
+		long start = p.endTime - p.elapsed;
+		return startFromToMat.getLeft() <= start && start <= startFromToMat.getRight();
+	}
+
+	public boolean isLoginFilterOk(XLogData d) {
+		if (StringUtil.isEmpty(filterStatus.login)) {
+			return true;
+		}
+		if (loginMat.getComp() == StrMatch.COMP.EQU) {
+			return d.p.login == HashUtil.hash(loginMat.getPattern());
+		} else {
+			String login = TextProxy.login.getLoadText(yyyymmdd, d.p.login, d.serverId);
+			return loginMat.include(login);
+		}
+	}
+
+	public boolean isDescFilterOk(XLogData d) {
+		if (StringUtil.isEmpty(filterStatus.desc)) {
+			return true;
+		}
+		if (descMat.getComp() == StrMatch.COMP.EQU) {
+			return d.p.desc == HashUtil.hash(descMat.getPattern());
+		} else {
+			String desc = TextProxy.desc.getLoadText(yyyymmdd, d.p.desc, d.serverId);
+			return descMat.include(desc);
+		}
+	}
+
+	public boolean isText1FilterOk(XLogData d) {
+		if (StringUtil.isEmpty(filterStatus.text1)) {
+			return true;
+		}
+		return text1Mat.include(d.p.text1);
+	}
+
+	public boolean isText2FilterOk(XLogData d) {
+		if (StringUtil.isEmpty(filterStatus.text2)) {
+			return true;
+		}
+		return text2Mat.include(d.p.text2);
+	}
+
+	public boolean isText3FilterOk(XLogData d) {
+		if (StringUtil.isEmpty(filterStatus.text3)) {
+			return true;
+		}
+		return text3Mat.include(d.p.text3);
+	}
+
+	public boolean isText4FilterOk(XLogData d) {
+		if (StringUtil.isEmpty(filterStatus.text4)) {
+			return true;
+		}
+		return text4Mat.include(d.p.text4);
+	}
+
+	public boolean isText5FilterOk(XLogData d) {
+		if (StringUtil.isEmpty(filterStatus.text5)) {
+			return true;
+		}
+		return text5Mat.include(d.p.text5);
+	}
 	
 	public boolean isUserAgentFilterOk(XLogData d) {
 		if (StringUtil.isEmpty(filterStatus.userAgent)) {
 			return true;
 		}
-		String userAgent = TextProxy.userAgent.getLoadText(yyyymmdd, d.p.userAgent, d.serverId);
-		return userAgentMat.include(userAgent);
+		if (userAgentMat.getComp() == StrMatch.COMP.EQU) {
+			return d.p.userAgent == HashUtil.hash(userAgentMat.getPattern());
+		} else {
+			String userAgent = TextProxy.userAgent.getLoadText(yyyymmdd, d.p.userAgent, d.serverId);
+			return userAgentMat.include(userAgent);
+		}
 	}
 	
 	public boolean isErrorFilterOk(XLogPack p) {
@@ -665,13 +786,32 @@ public class XLogViewPainter {
 		this.yValueMax = yAxis.getDefaultMax();
 		this.yValueMin = 0;
 	}
-	
+
+	private DateTimeFormatter hmsFormatter = DateTimeFormatter.ofPattern("HHmmss");
 	public void setFilterStatus(XLogFilterStatus status) {
 		this.filterStatus = status;
 		filter_hash = filterStatus.hashCode();
 		objNameMat = new StrMatch(status.objName);
 		serviceMat = new StrMatch(status.service);
 		ipMat = new StrMatch(status.ip);
+
+		loginMat = new StrMatch(status.login);
+		text1Mat = new StrMatch(status.text1);
+		text2Mat = new StrMatch(status.text2);
+		text3Mat = new StrMatch(status.text3);
+		text4Mat = new StrMatch(status.text4);
+		text5Mat = new StrMatch(status.text5);
+		descMat = new StrMatch(status.desc);
 		userAgentMat = new StrMatch(status.userAgent);
+
+		if (status.startHmsFrom.length() == 6 && status.startHmsTo.length() == 6) {
+			long dateMillis = DateUtil.dateUnitToTimeMillis(DateUtil.getDateUnit(paintedEndTime));
+			long startFrom = dateMillis + LocalTime.parse(status.startHmsFrom, hmsFormatter).toSecondOfDay() * 1000;
+			long startTo = dateMillis + LocalTime.parse(status.startHmsTo, hmsFormatter).toSecondOfDay() * 1000;
+
+			startFromToMat = new Pair<>(startFrom, startTo);
+		} else {
+			startFromToMat = new Pair<>(0L, 0L);
+		}
 	}
 }

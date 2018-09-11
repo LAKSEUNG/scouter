@@ -86,7 +86,7 @@ import scouter.util.CastUtil;
 import scouter.util.DateUtil;
 import scouter.util.StringUtil;
 
-public class CounterPastTimeGroupTotalView extends ScouterViewPart implements CalendarDialog.ILoadCounterDialog {
+public class CounterPastTimeGroupTotalView extends ScouterViewPart implements CalendarDialog.ILoadCalendarDialog {
 
 	public static final String ID = CounterPastTimeGroupTotalView.class.getName();
 			
@@ -298,7 +298,7 @@ public class CounterPastTimeGroupTotalView extends ScouterViewPart implements Ca
 		Set<Integer> objHashs = manager.getObjectsByGroup(grpName);
 		for (int objHash : objHashs) {
 			AgentObject agentObj = AgentModelThread.getInstance().getAgentObject(objHash);
-			if (agentObj == null || agentObj.isAlive() == false) {
+			if (agentObj == null) {
 				continue;
 			}
 			int serverId = agentObj.getServerId();

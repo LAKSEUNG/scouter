@@ -23,7 +23,9 @@ import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.VerifyListener;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.layout.RowData;
@@ -32,19 +34,22 @@ import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
-import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
-
 import scouter.client.xlog.XLogFilterStatus;
 import scouter.client.xlog.views.XLogViewCommon;
+import scouter.util.StringUtil;
+
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 public class XLogFilterDialog extends Dialog {
 	
 	Combo objCombo;
-	Text serviceTxt, ipTxt, userAgentTxt;
+	Text serviceTxt, ipTxt, startHmsFromTxt, startHmsToTxt, userAgentTxt, loginText, descText, text1Text, text2Text, text3Text, text4Text, text5Text;
 	Button onlySqlBtn, onlyApiBtn, onlyErrorBtn;
 	Button clearBtn, applyBtn;
 	
@@ -92,6 +97,7 @@ public class XLogFilterDialog extends Dialog {
 		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
 		serviceTxt = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
 		serviceTxt.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		serviceTxt.setText(status.service);
 		serviceTxt.addModifyListener(new ModifyListener() {
 			public void modifyText(ModifyEvent arg0) {
 				newStatus.service = serviceTxt.getText();
@@ -111,6 +117,67 @@ public class XLogFilterDialog extends Dialog {
 				compareHash();
 			}
 		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("StartHMS");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+
+		Composite startTimeComposite = new Composite(filterGrp, SWT.NONE);
+		startTimeComposite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+
+		FillLayout filllayout = new FillLayout();
+		filllayout.marginWidth = 0;
+		filllayout.marginHeight = 0;
+		startTimeComposite.setLayout(filllayout);
+
+
+		startHmsFromTxt = new Text(startTimeComposite, SWT.BORDER | SWT.SINGLE);
+		startHmsFromTxt.setTextLimit(6);
+		startHmsFromTxt.setText(status.startHmsFrom);
+		startHmsFromTxt.addVerifyListener(hhmmssListener);
+		startHmsFromTxt.addModifyListener(arg0 -> {
+			newStatus.startHmsFrom = startHmsFromTxt.getText();
+			compareHash();
+		});
+
+
+		label = new Label(startTimeComposite, SWT.CENTER);
+		label.setText(" ~ ");
+
+		startHmsToTxt = new Text(startTimeComposite, SWT.BORDER | SWT.SINGLE);
+		startHmsToTxt.setTextLimit(6);
+		startHmsToTxt.setText(status.startHmsTo);
+		startHmsToTxt.addVerifyListener(hhmmssListener);
+		startHmsToTxt.addModifyListener(arg0 -> {
+			newStatus.startHmsTo = startHmsToTxt.getText();
+			compareHash();
+		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("LOGIN");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+		loginText = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
+		loginText.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		loginText.setText(status.login);
+		loginText.addModifyListener(new ModifyListener() {
+			public void modifyText(ModifyEvent arg0) {
+				newStatus.login = loginText.getText();
+				compareHash();
+			}
+		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("DESC");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+		descText = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
+		descText.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		descText.setText(status.desc);
+		descText.addModifyListener(new ModifyListener() {
+			public void modifyText(ModifyEvent arg0) {
+				newStatus.desc = descText.getText();
+				compareHash();
+			}
+		});
 		
 		label = new Label(filterGrp, SWT.NONE);
 		label.setText("User-Agent");
@@ -121,6 +188,71 @@ public class XLogFilterDialog extends Dialog {
 		userAgentTxt.addModifyListener(new ModifyListener() {
 			public void modifyText(ModifyEvent arg0) {
 				newStatus.userAgent = userAgentTxt.getText();
+				compareHash();
+			}
+		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("TEXT1");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+		text1Text = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
+		text1Text.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		text1Text.setText(status.text1);
+		text1Text.addModifyListener(new ModifyListener() {
+			public void modifyText(ModifyEvent arg0) {
+				newStatus.text1 = text1Text.getText();
+				compareHash();
+			}
+		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("TEXT2");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+		text2Text = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
+		text2Text.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		text2Text.setText(status.text2);
+		text2Text.addModifyListener(new ModifyListener() {
+			public void modifyText(ModifyEvent arg0) {
+				newStatus.text2 = text2Text.getText();
+				compareHash();
+			}
+		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("TEXT3");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+		text3Text = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
+		text3Text.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		text3Text.setText(status.text3);
+		text3Text.addModifyListener(new ModifyListener() {
+			public void modifyText(ModifyEvent arg0) {
+				newStatus.text3 = text3Text.getText();
+				compareHash();
+			}
+		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("TEXT4");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+		text4Text = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
+		text4Text.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		text4Text.setText(status.text4);
+		text4Text.addModifyListener(new ModifyListener() {
+			public void modifyText(ModifyEvent arg0) {
+				newStatus.text4 = text4Text.getText();
+				compareHash();
+			}
+		});
+
+		label = new Label(filterGrp, SWT.NONE);
+		label.setText("TEXT5");
+		label.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, false));
+		text5Text = new Text(filterGrp, SWT.BORDER | SWT.SINGLE);
+		text5Text.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, false));
+		text5Text.setText(status.text5);
+		text5Text.addModifyListener(new ModifyListener() {
+			public void modifyText(ModifyEvent arg0) {
+				newStatus.text5 = text5Text.getText();
 				compareHash();
 			}
 		});
@@ -176,6 +308,15 @@ public class XLogFilterDialog extends Dialog {
 				objCombo.setText("");
 				serviceTxt.setText("");
 				ipTxt.setText("");
+				startHmsFromTxt.setText("");
+				startHmsToTxt.setText("");
+				loginText.setText("");
+				descText.setText("");
+				text1Text.setText("");
+				text2Text.setText("");
+				text3Text.setText("");
+				text4Text.setText("");
+				text5Text.setText("");
 				userAgentTxt.setText("");
 				onlySqlBtn.setSelection(false);
 				onlyApiBtn.setSelection(false);
@@ -191,6 +332,22 @@ public class XLogFilterDialog extends Dialog {
 		applyBtn.setText("&Apply");
 		applyBtn.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
+				String startHmsFrom = startHmsFromTxt.getText();
+				if(startHmsFrom.length() > 0 && startHmsFrom.length() < 6) {
+					for(int i = startHmsFrom.length(); i < 6; i++) {
+						startHmsFrom += '0';
+					}
+					startHmsFromTxt.setText(startHmsFrom);
+				}
+
+				String startHmsTo = startHmsToTxt.getText();
+				if(startHmsTo.length() > 0 && startHmsTo.length() < 6) {
+					for(int i = startHmsTo.length(); i < 6; i++) {
+						startHmsTo += '0';
+					}
+					startHmsToTxt.setText(startHmsTo);
+				}
+
 				view.setFilter(newStatus);
 				filterHash = newStatus.hashCode();
 				compareHash();
@@ -208,12 +365,12 @@ public class XLogFilterDialog extends Dialog {
 		}
 	}
 	
-	
-	
 	@Override
 	protected void okPressed() {
 		if (newStatus.hashCode() != filterHash) {
-			applyBtn.notifyListeners(SWT.Selection, new Event());
+			view.setFilter(newStatus);
+			filterHash = newStatus.hashCode();
+			compareHash();
 		}
 		super.okPressed();
 	}
@@ -229,8 +386,26 @@ public class XLogFilterDialog extends Dialog {
 		newShell.setText("XLog Filter");
 	}
 
-	@Override
-	protected boolean isResizable() {
-		return true;
-	}
+	VerifyListener hhmmssListener = e -> {
+		if (!StringUtil.isInteger(e.text) && !StringUtil.isEmpty(e.text)) {
+			e.doit = false;
+			return;
+		}
+
+		Text text = (Text) e.getSource();
+		final String prev = text.getText();
+		String after = prev.substring(0, e.start) + e.text + prev.substring(e.end);
+
+		for(int i = after.length(); i < 6; i++) {
+			after += '0';
+		}
+
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HHmmss");
+		try {
+			LocalTime.parse(after, formatter);
+		} catch (DateTimeParseException ignore) {
+			e.doit = false;
+		}
+
+	};
 }

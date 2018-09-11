@@ -17,15 +17,6 @@
  */
 package scouter.client.views;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IMenuListener;
@@ -63,8 +54,8 @@ import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.swt.widgets.TreeItem;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.internal.WorkbenchWindow;
 import org.eclipse.ui.part.ViewPart;
-
 import scouter.client.Images;
 import scouter.client.actions.AddServerAction;
 import scouter.client.actions.ClearObjectFilterAction;
@@ -79,6 +70,7 @@ import scouter.client.actions.OpenServerThreadListAction;
 import scouter.client.configuration.actions.AddAccountAction;
 import scouter.client.configuration.actions.EditAccountAction;
 import scouter.client.configuration.actions.ListAccountAction;
+import scouter.client.configuration.actions.OpenAlertScriptingAction;
 import scouter.client.configuration.actions.OpenGroupPolicyAction;
 import scouter.client.configuration.actions.OpenServerConfigureAction;
 import scouter.client.constants.MenuStr;
@@ -97,6 +89,7 @@ import scouter.client.model.GroupObject;
 import scouter.client.model.HierarchyObject;
 import scouter.client.model.RefreshThread;
 import scouter.client.model.ServerObject;
+import scouter.client.net.LoginMgr;
 import scouter.client.popup.ObjectSelectionDialog;
 import scouter.client.server.GroupPolicyConstants;
 import scouter.client.server.Server;
@@ -110,11 +103,29 @@ import scouter.client.util.ExUtil;
 import scouter.client.util.ImageUtil;
 import scouter.client.util.MenuUtil;
 import scouter.client.util.ScouterUtil;
+import scouter.lang.Counter;
+import scouter.lang.Family;
+import scouter.lang.ObjectType;
 import scouter.lang.counters.CounterConstants;
 import scouter.lang.counters.CounterEngine;
+import scouter.lang.pack.MapPack;
+import scouter.lang.value.BlobValue;
 import scouter.lang.value.Value;
 import scouter.util.CastUtil;
 import scouter.util.FormatUtil;
+import scouter.util.HashUtil;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
 public class ObjectNavigationView extends ViewPart implements RefreshThread.Refreshable {
 	public static final String ID = ObjectNavigationView.class.getName();
@@ -138,12 +149,30 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 	PresentMode mode = PresentMode.HIERACHY_MODE;
 	boolean prevExistUnknown = false;
 	
+	MenuManager topMenuManager;
+	IMenuManager collectorMenuManager;
+	IMenuManager hostMenuManager;
+	IMenuManager objectMenuManager;
+	
 	public void refresh() {
 		if (mode == PresentMode.HIERACHY_MODE) {
 			makeHierarchyMap();
 		} else if (mode == PresentMode.FLAT_MODE) {
 			makeFlatMap();
 		}
+		
+		Integer[] actionSet = counterActions.keySet().toArray(new Integer[counterActions.size()]);
+		Set<Integer> existServerSet = agentThread.existServerSet();
+		for (int serverId : actionSet) {
+			Server server = ServerManager.getInstance().getServer(serverId);
+			if (existServerSet.contains(serverId) == false || server == null) {
+				removeActionCache(serverId);
+			} else if (server.isDirty()) {
+				server.setDirty(false);
+				removeActionCache(serverId);
+			}
+		}
+		
 		ExUtil.exec(agentTree, new Runnable() {
 			public void run() {
 				refreshViewer();
@@ -153,7 +182,7 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 					if (existUnknown) {
 						griddata.exclude = false;
 						noticeLabel.setImage(Images.exclamation);
-						noticeLabel.setText("Define unknown object type.");
+						noticeLabel.setText("Unknown monitoring group id(object type) detected.\nClick for Re-Check.");
 						noticeComposite.setVisible(true);
 						parent.layout(false);
 					} else {
@@ -169,7 +198,27 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 	
 	private void forceRefresh() {
 		agentThread.fetchObjectList();
+		refreshCounterEngine();
 		refresh();
+	}
+
+	private void refreshCounterEngine() {
+		Set<Integer> serverIdSet = ServerManager.getInstance().getOpenServerList();
+		if (serverIdSet.size() > 0) {
+			for (int serverId : serverIdSet) {
+				CounterEngine counterEngine = ServerManager.getInstance().getServer(serverId).getCounterEngine();
+				MapPack m = LoginMgr.getCounterXmlServer(serverId);
+				if (m != null) {
+					counterEngine.clear();
+					Value v1 = m.get("default");
+					counterEngine.parse(((BlobValue)v1).value);
+					v1 = m.get("custom");
+					if (v1 != null) {
+						counterEngine.parse(((BlobValue)v1).value);
+					}
+				}
+			}
+		}
 	}
 	
 	public void refreshViewer() {
@@ -216,18 +265,36 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 		objTreeViewer.setContentProvider(new ViewContentProvider());
 		objTreeViewer.setLabelProvider(new TableLabelProvider());
 		objTreeViewer.setInput(root);
-		
+
+		noticeLabel.addListener(SWT.MouseUp, new Listener() {
+			@Override
+			public void handleEvent(Event event) {
+				refreshCounterEngine();
+			}
+		});
+
 		createContextMenu(objTreeViewer, new IMenuListener() {
             public void menuAboutToShow(IMenuManager manager){
             	if(selectedItem){
-            		fillTreeViewerContextMenu(manager);
+            		ISelection selection = objTreeViewer.getSelection();
+					if (selection instanceof IStructuredSelection) {
+			            IStructuredSelection sel = (IStructuredSelection)selection;
+			            Object[] elements = sel.toArray();
+			            if (elements == null || elements.length < 1) {
+			            	return;
+			            }
+			            Object selObject = elements[elements.length - 1];
+			            if (selObject instanceof HierarchyObject) {
+			            	fillMenu(manager, (HierarchyObject) selObject);
+			            }
+					}
+            		
             	}else{
             		backgroundContextMenu(manager);
             	}
             }
         });
 		
-		// RIGHT CLICK HANDLING
 		objTreeViewer.getTree().addListener(SWT.MouseDown, new Listener() {
 			public void handleEvent(Event event) {
 				Point point = new Point(event.x, event.y);
@@ -237,6 +304,7 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 				} else {
 					selectedItem = false;
 				}
+				
 			}
 		});
 		
@@ -271,6 +339,7 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 		});
 		
 		createQuickMenus();
+		initTopMenuMangers();
 		ObjectSelectManager.getInstance().addObjectCheckStateListener(new IObjectCheckListener() {
 			public void notifyChangeState() {
 				if (objSelMgr.unselectedSize() > 0) {
@@ -285,9 +354,128 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 		thread = new RefreshThread(this, 3000);
 		thread.start();
 	}
+	
+	private void resetTopMenu(IMenuManager manager, String dummy) {
+		manager.removeAll();
+		manager.add(new DummyAction(dummy, Images.alert));
+	}
+	
+	private HierarchyObject fillTopMenu(HierarchyObject object, IMenuManager manager) {
+		manager.removeAll();
+		fillMenu(manager, object);
+		return object;
+	}
+	
+	private void initTopMenuMangers() {
+		WorkbenchWindow win = (WorkbenchWindow) getViewSite().getWorkbenchWindow();
+		topMenuManager = win.getMenuManager();
+		collectorMenuManager = (IMenuManager) topMenuManager.find("scouter.menu.collector");
+		hostMenuManager = (IMenuManager) topMenuManager.find("scouter.menu.host");
+		objectMenuManager = (IMenuManager) topMenuManager.find("scouter.menu.object");
+		collectorMenuManager.add(new DummyAction("Choose Collector in ObjectView", Images.alert));
+		hostMenuManager.add(new DummyAction("Choose Host in ObjectView", Images.alert));
+		objectMenuManager.add(new DummyAction("Choose Object in ObjectView", Images.alert));
+		topMenuManager.update(true);
+		collectorMenuManager.addMenuListener(new IMenuListener() {
+			public void menuAboutToShow(IMenuManager mgr) {
+				ISelection selection = objTreeViewer.getSelection();
+				if (selection instanceof IStructuredSelection) {
+		            IStructuredSelection sel = (IStructuredSelection)selection;
+		            Object[] elements = sel.toArray();
+		            ServerObject serverObject = null;
+		            if (elements == null || elements.length < 1) {
+		            	Server defServer = ServerManager.getInstance().getDefaultServer();
+		            	serverObject = root.get(defServer.getName());
+		            } else {
+		            	Object selObject = elements[elements.length - 1];
+		            	if (selObject instanceof ServerObject) {
+		            		serverObject = (ServerObject) selObject;
+		            	} else if (selObject instanceof AgentObject) {
+		            		AgentObject ao = (AgentObject) selObject;
+		            		Server server = ServerManager.getInstance().getServer(ao.getServerId());
+		            		serverObject = root.get(server.getName());
+		            	}
+		            }
+		            if (serverObject != null) {
+		            	fillTopMenu(serverObject, mgr);
+		            } else {
+		            	resetTopMenu(collectorMenuManager, "Choose Collector in ObjectView");
+		            }
+		            
+				}
+			}
+		});
+		hostMenuManager.addMenuListener(new IMenuListener() {
+			public void menuAboutToShow(IMenuManager mgr) {
+				ISelection selection = objTreeViewer.getSelection();
+				if (selection instanceof IStructuredSelection) {
+		            IStructuredSelection sel = (IStructuredSelection)selection;
+		            Object[] elements = sel.toArray();
+		            AgentObject hostObject = null;
+		            if (elements == null || elements.length < 1) {
+		            	return;
+		            } else {
+		            	Object selObject = elements[elements.length - 1];
+		            	if (selObject instanceof AgentObject) {
+		            		AgentObject agent = (AgentObject) selObject;
+		            		int serverId = agent.getServerId();
+			            	Server server = ServerManager.getInstance().getServer(serverId);
+			            	CounterEngine engine = server.getCounterEngine();
+			            	if (engine.isChildOf(agent.getObjType(), CounterConstants.FAMILY_HOST)) {
+			            		hostObject = agent;
+			            	} else {
+			            		String objName = agent.getObjName();
+		            			String host = objName.substring(0, objName.indexOf("/", 1));
+		            			hostObject = agentThread.getAgentObject(HashUtil.hash(host));
+			            	}
+		            	}
+		            }
+		            if (hostObject != null) {
+		            	fillTopMenu(hostObject, mgr);
+		            } else {
+		            	resetTopMenu(hostMenuManager, "Choose Host in ObjectView");
+		            }
+				}
+			}
+		});
+		objectMenuManager.addMenuListener(new IMenuListener() {
+			public void menuAboutToShow(IMenuManager mgr) {
+				ISelection selection = objTreeViewer.getSelection();
+				if (selection instanceof IStructuredSelection) {
+		            IStructuredSelection sel = (IStructuredSelection)selection;
+		            Object[] elements = sel.toArray();
+		            AgentObject object = null;
+		            if (elements == null || elements.length < 1) {
+		            	return;
+		            } else {
+		            	Object selObject = elements[elements.length - 1];
+		            	if (selObject instanceof AgentObject) {
+		            		AgentObject agent = (AgentObject) selObject;
+		            		int serverId = agent.getServerId();
+			            	Server server = ServerManager.getInstance().getServer(serverId);
+			            	CounterEngine engine = server.getCounterEngine();
+			            	if (!engine.isChildOf(agent.getObjType(), CounterConstants.FAMILY_HOST)) {
+			            		object = agent;
+			            	}
+		            	}
+		            }
+		            if (object != null) {
+		            	fillTopMenu(object, mgr);
+		            } else {
+		            	resetTopMenu(objectMenuManager, "Choose Object in ObjectView");
+		            }
+				}
+			}
+		});
+	}
 
 	private void createQuickMenus(){
 		IToolBarManager man = getViewSite().getActionBars().getToolBarManager();
+		man.add(new Action("Expand All", ImageUtil.getImageDescriptor(Images.expand)) {
+			public void run() {
+				objTreeViewer.expandAll();
+			}
+		});
 		man.add(new Action("Collapse All", ImageUtil.getImageDescriptor(Images.collapse)) {
 			public void run() {
 				objTreeViewer.collapseAll();
@@ -359,104 +547,29 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 	
 	private static HashMap<Integer, Map<String, Action>> counterActions = new HashMap<Integer, Map<String, Action>>();
 	
-	private void fillTreeViewerContextMenu(IMenuManager mgr){
-		ISelection selection = objTreeViewer.getSelection();
-		
-		if (selection instanceof IStructuredSelection) {
-            IStructuredSelection sel = (IStructuredSelection)selection;
-            Object[] elements = sel.toArray();
-            if (elements == null || elements.length < 1) {
-            	return;
-            }
-            Object selObject = elements[elements.length - 1];
-            
-            IWorkbenchWindow win = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
-            // CREATE CONTEXT MENU - Agent Object
-            if (selObject instanceof AgentObject) {
-            	AgentObject ao = (AgentObject) selObject;
-            	CounterEngine engine = ServerManager.getInstance().getServer(ao.getServerId()).getCounterEngine();
-            	if (!engine.isUnknownObjectType(ao.getObjType())) {
-	            	mgr.add(new DummyAction("Type : " + ao.getObjType() + "<" + engine.getObjectType(ao.getObjType()).getFamily().getName() +"> ", Images.getObjectIcon(ao.getObjType(), true, ao.getServerId())));
-					mgr.add(new Separator());
-            	}
-            	MenuUtil.addObjectContextMenu(mgr, win, (AgentObject) selObject);
-		    // CREATE CONTEXT MENU - Server Object	
-			} else if (selObject instanceof ServerObject) {
+	private void fillMenu(IMenuManager mgr, HierarchyObject selObject){
+        IWorkbenchWindow win = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+        // CREATE CONTEXT MENU - Agent Object
+        if (selObject instanceof AgentObject) {
+        	AgentObject ao = (AgentObject) selObject;
+        	CounterEngine engine = ServerManager.getInstance().getServer(ao.getServerId()).getCounterEngine();
+        	if (!engine.isUnknownObjectType(ao.getObjType())) {
+            	mgr.add(new DummyAction(ao.getDisplayName(), Images.getObjectIcon(ao.getObjType(), true, ao.getServerId())));
+				mgr.add(new Separator());
+        	}
+        	MenuUtil.addObjectContextMenu(mgr, win, (AgentObject) selObject);
+	    // CREATE CONTEXT MENU - Server Object	
+		} else if (selObject instanceof ServerObject) {
+			
+			int serverId = ((ServerObject) selObject).getId();
+			Server server = ServerManager.getInstance().getServer(serverId);
+			boolean isOpen = server.isOpen();
+			if (isOpen) {
+				CounterEngine counterEngine = server.getCounterEngine();
+				mgr.add(new DummyAction(server.getName(), Images.server));
+				mgr.add(new Separator());
 				
-				int serverId = ((ServerObject) selObject).getId();
-				Server server = ServerManager.getInstance().getServer(serverId);
-				boolean isOpen = server.isOpen();
-				if (isOpen) {
-					CounterEngine counterEngine = server.getCounterEngine();
-					mgr.add(new DummyAction("Current User : "+server.getUserId()+" <"+server.getGroup()+">", Images.CONFIG_USER));
-					mgr.add(new Separator());
-					
-					if (server.isConnected()) {
-						Map<String, Action> counterActionsMap = counterActions.get(serverId);
-						if (counterActionsMap == null) {
-							counterActionsMap = MenuUtil.getCounterActionList(win, counterEngine, serverId);
-							if(counterActionsMap == null)
-								return;
-							counterActions.put(serverId, counterActionsMap);
-						}
-						addExistObjectTypeMenus(win, mgr, counterEngine, counterActionsMap, serverId);
-						if (server.isEnableMenu("tag_count")) {
-							mgr.add(new Separator());
-							mgr.add(new OpenTagCountViewAction(win, serverId));
-						}
-						mgr.add(new Separator());
-						mgr.add(new OpenTotalSummaryAction(win, serverId));
-						mgr.add(new OpenAlertDetailListAction(win, serverId));
-						mgr.add(new Separator());
-						if (server.isAllowAction(GroupPolicyConstants.ALLOW_CONFIGURE))
-							mgr.add(new OpenServerConfigureAction(win, MenuStr.CONFIGURE, Images.config, serverId));
-						mgr.add(new OpenObjectDailyListAction(win, "Object Daily List", Images.GO_PAST, serverId));
-						mgr.add(new Separator());
-						MenuManager management = new MenuManager(MenuStr.MANAGEMENT, MenuStr.MANAGEMENT_ID);
-						mgr.add(management);
-						management.add(new OpenCxtmenuEnvAction(win, MenuStr.ENV, 0, serverId));
-						management.add(new OpenServerThreadListAction(win, MenuStr.SERVER_THREAD_LIST, Images.thread, serverId));
-						if (server.isAllowAction(GroupPolicyConstants.ALLOW_LOGINLIST))
-							management.add(new OpenLoginListAction(win, MenuStr.CURRENT_LOGIN_LIST, Images.CONFIG_USER, serverId));
-						if (server.isAllowAction(GroupPolicyConstants.ALLOW_DBMANAGER))
-							management.add(new OpenServerFileManagementAction(win, MenuStr.FILE_MANAGEMENT, Images.explorer, serverId));
-						management.add(new OpenServerLogsAction(win, serverId));
-						MenuManager userMenu = new MenuManager(MenuStr.ACCOUNT, ImageUtil.getImageDescriptor(Images.CONFIG_USER), MenuStr.ACCOUNT_ID);
-						management.add(userMenu);
-						userMenu.add(new ListAccountAction(win, serverId));
-						userMenu.add(new OpenGroupPolicyAction(win, serverId));
-						userMenu.add(new Separator());
-						if (server.isAllowAction(GroupPolicyConstants.ALLOW_ADDACCOUNT))
-							userMenu.add(new AddAccountAction(win, serverId));
-						if (server.isAllowAction(GroupPolicyConstants.ALLOW_EDITACCOUNT))
-							userMenu.add(new EditAccountAction(win, serverId));
-					}
-					mgr.add(new Separator());
-					if(ServerManager.getInstance().getOpenServerList().size() > 1) {
-						if(server != ServerManager.getInstance().getDefaultServer() && server.isConnected()){
-							mgr.add(new SetDefaultServerAction(win, server));
-						}
-						mgr.add(new CloseServerAction(win, serverId));
-						mgr.add(new RemoveServerAction(win, serverId));
-					}
-					mgr.add(new Separator());
-					mgr.add(new OpenCxtmenuServerPropertiesAction(win, MenuStr.PROPERTIES, serverId));
-					if (false) {
-						mgr.add(new Separator());
-						mgr.add(new OpenAPIDebugViewAction(win, 0, serverId));
-					}
-				} else {
-					mgr.add(new OpenServerAction(serverId));
-					mgr.add(new RemoveServerAction(win, serverId));
-				}
-			} else if (selObject instanceof GroupObject) {
-				GroupObject obj = (GroupObject) selObject;
-				HierarchyObject parent = obj.getParent();
-				if (parent == null || parent instanceof ServerObject == false) {
-					return;
-				}
-				int serverId = ((ServerObject) parent).getId();
-				CounterEngine counterEngine = ServerManager.getInstance().getServer(serverId).getCounterEngine();
+				//if (server.isConnected()) {
 				Map<String, Action> counterActionsMap = counterActions.get(serverId);
 				if (counterActionsMap == null) {
 					counterActionsMap = MenuUtil.getCounterActionList(win, counterEngine, serverId);
@@ -464,21 +577,142 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 						return;
 					counterActions.put(serverId, counterActionsMap);
 				}
-				addObjectTypeMenu(mgr, counterEngine, counterActionsMap, serverId, obj.getObjType());
+				addExistObjectTypeMenus(win, mgr, counterEngine, counterActionsMap, serverId);
+				if (server.isEnableMenu("tag_count")) {
+					mgr.add(new Separator());
+					mgr.add(new OpenTagCountViewAction(win, serverId));
+				}
+				mgr.add(new Separator());
+				mgr.add(new OpenTotalSummaryAction(win, serverId));
+				mgr.add(new OpenAlertDetailListAction(win, serverId));
+
+				mgr.add(new Separator());
+				if (server.isAllowAction(GroupPolicyConstants.ALLOW_CONFIGURE))
+					mgr.add(new OpenServerConfigureAction(win, MenuStr.CONFIGURE, Images.config, serverId));
+
+
+				MenuManager alertMenuManager = new MenuManager(MenuStr.ALERT_SCRIPTING, ImageUtil.getImageDescriptor(Images.alert), MenuStr.ALERT_SCRIPTING_ID);
+				mgr.add(alertMenuManager);
+				Map<String, Map<String, String>> alertMenuMap = new TreeMap<>();
+				for (AgentObject agentObject : AgentModelThread.getInstance().getObjectList()) {
+					if (agentObject.getServerId() != serverId) {
+						continue;
+					}
+					ObjectType objectType = counterEngine.getObjectType(agentObject.getObjType());
+					if(objectType == null) {
+						System.out.println("[Null Object Type]" + agentObject.getObjType());
+						continue;
+					}
+					if (objectType.isSubObject()) {
+						continue;
+					}
+					Family family = objectType.getFamily();
+					if(family == null) {
+						System.out.println("[Null family Type]" + agentObject.getObjType());
+						continue;
+					}
+					List<Counter> counterList = family.listCounters();
+					for (Counter counter : counterList) {
+						if(!counter.isAll()) continue;
+						Map<String, String> itemMap = new HashMap<>();
+						itemMap.put("familyName", family.getName());
+						itemMap.put("counterName", counter.getName());
+						itemMap.put("counterDisplayName", counter.getDisplayName());
+						alertMenuMap.put(family.getName() + ":" + counter.getName(), itemMap);
+					}
+				}
+				for (Map.Entry<String, Map<String, String>> entry : alertMenuMap.entrySet()) {
+					Map<String, String> entryValue = entry.getValue();
+					alertMenuManager.add(new OpenAlertScriptingAction(win, entry.getKey(), Images.alert, serverId,
+							entryValue.get("familyName"), entryValue.get("counterName"), entryValue.get("counterDisplayName")));
+				}
+
+				mgr.add(new OpenObjectDailyListAction(win, "Object Daily List", Images.GO_PAST, serverId));
+				mgr.add(new Separator());
+				MenuManager management = new MenuManager(MenuStr.MANAGEMENT, MenuStr.MANAGEMENT_ID);
+				mgr.add(management);
+				management.add(new OpenCxtmenuEnvAction(win, MenuStr.ENV, 0, serverId));
+				management.add(new OpenServerThreadListAction(win, MenuStr.SERVER_THREAD_LIST, Images.thread, serverId));
+				if (server.isAllowAction(GroupPolicyConstants.ALLOW_LOGINLIST))
+					management.add(new OpenLoginListAction(win, MenuStr.CURRENT_LOGIN_LIST, Images.CONFIG_USER, serverId));
+				if (server.isAllowAction(GroupPolicyConstants.ALLOW_DBMANAGER))
+					management.add(new OpenServerFileManagementAction(win, MenuStr.FILE_MANAGEMENT, Images.explorer, serverId));
+				management.add(new OpenServerLogsAction(win, serverId));
+				MenuManager userMenu = new MenuManager(MenuStr.ACCOUNT, ImageUtil.getImageDescriptor(Images.CONFIG_USER), MenuStr.ACCOUNT_ID);
+				management.add(userMenu);
+				userMenu.add(new ListAccountAction(win, serverId));
+				userMenu.add(new OpenGroupPolicyAction(win, serverId));
+				userMenu.add(new Separator());
+				if (server.isAllowAction(GroupPolicyConstants.ALLOW_ADDACCOUNT))
+					userMenu.add(new AddAccountAction(win, serverId));
+				if (server.isAllowAction(GroupPolicyConstants.ALLOW_EDITACCOUNT))
+					userMenu.add(new EditAccountAction(win, serverId));
+				//}
+				mgr.add(new Separator());
+				if(ServerManager.getInstance().getOpenServerList().size() > 1) {
+					if(server != ServerManager.getInstance().getDefaultServer() && server.isConnected()){
+						mgr.add(new SetDefaultServerAction(win, server));
+					}
+					mgr.add(new CloseServerAction(win, serverId));
+					mgr.add(new RemoveServerAction(win, serverId));
+				}
+				mgr.add(new Separator());
+				mgr.add(new OpenCxtmenuServerPropertiesAction(win, MenuStr.PROPERTIES, serverId));
+				if (false) {
+					mgr.add(new Separator());
+					mgr.add(new OpenAPIDebugViewAction(win, 0, serverId));
+				}
 			} else {
-				mgr.removeAll();
+				mgr.add(new OpenServerAction(serverId));
+				mgr.add(new RemoveServerAction(win, serverId));
 			}
-        }
+		} else if (selObject instanceof GroupObject) {
+			GroupObject obj = (GroupObject) selObject;
+			HierarchyObject parent = obj.getParent();
+			if (parent == null || parent instanceof ServerObject == false) {
+				return;
+			}
+			int serverId = ((ServerObject) parent).getId();
+			CounterEngine counterEngine = ServerManager.getInstance().getServer(serverId).getCounterEngine();
+			Map<String, Action> counterActionsMap = counterActions.get(serverId);
+			if (counterActionsMap == null) {
+				counterActionsMap = MenuUtil.getCounterActionList(win, counterEngine, serverId);
+				if(counterActionsMap == null)
+					return;
+				counterActions.put(serverId, counterActionsMap);
+			}
+			addObjectTypeMenu(mgr, counterEngine, counterActionsMap, serverId, obj.getObjType());
+		} else {
+			mgr.removeAll();
+		}
     }
 	
 	private void addExistObjectTypeMenus(IWorkbenchWindow win, IMenuManager mgr, CounterEngine counterEngine, Map<String, Action> actionMap, int serverId) {
 		Set<String> agentTypeList = agentThread.getCurrentObjectTypeList(serverId);
+		List<ObjectType> objTypeList = new ArrayList<>(); 
 		for(String objType : agentTypeList){
-			String objTypeDisplay = counterEngine.getDisplayNameObjectType(objType);
+			ObjectType type = counterEngine.getObjectType(objType);
+			if (type != null) {
+				objTypeList.add(type);
+			}
+		}
+		Collections.sort(objTypeList, new Comparator<ObjectType>() {
+
+			@Override
+			public int compare(ObjectType o1, ObjectType o2) {
+				return o1.getDisplayName().compareTo(o2.getDisplayName());
+			}
+			
+		});
+
+		for(ObjectType type : objTypeList){
+			String objType = type.getName();
+			String displayName = type.getDisplayName();
 			ImageDescriptor objImage = Images.getObjectImageDescriptor(objType, true, serverId);
-			MenuManager objTitle = new MenuManager(objTypeDisplay, objImage, "scouter.menu.id."+objTypeDisplay);
+			MenuManager objTitle = new MenuManager(displayName, objImage, "scouter.menu.id."+displayName);
 			mgr.add(objTitle);
 			addObjectTypeMenu(objTitle, counterEngine, actionMap, serverId, objType);
+			MenuUtil.addObjTypeSpecialMenu(win, objTitle, serverId, objType, counterEngine);
 		}
 	}
 
@@ -492,58 +726,9 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 				objTitle.add(realtimeAllAct);
 			}
 		}
-		
-		objTitle.add(new Separator());
-		
-		Action act = actionMap.get(objType + ":" + CounterConstants.ACTIVE_EQ);
-		if(act != null){
-			objTitle.add(act);
-		}
-		
-		act = actionMap.get(objType + ":" + CounterConstants.ACTIVE_THREAD_LIST);
-		if(act != null){
-			act.setText(MenuStr.ACTIVE_SERVICE_LIST);
-			act.setImageDescriptor(ImageUtil.getImageDescriptor(Images.thread));
-			objTitle.add(act);
-		}
-		
-		act = actionMap.get(objType + ":" + CounterConstants.TOTAL_ACTIVE_SPEED);
-		if(act != null){
-			act.setText(MenuStr.ACTIVE_SPEED_REAL);
-			act.setImageDescriptor(ImageUtil.getImageDescriptor(Images.TYPE_ACTSPEED));
-			objTitle.add(act);
-		}
-		
-		MenuManager xLogMenu = new MenuManager(MenuStr.XLOG, ImageUtil.getImageDescriptor(Images.transrealtime), MenuStr.XLOG_ID);
-		objTitle.add(xLogMenu);
-		
-		act = actionMap.get(objType + ":" + CounterConstants.TRANX_REALTIME);
-		if(act != null){
-			objTitle.add(act);
-		}
-		
-		act = actionMap.get(objType + ":" + CounterConstants.TODAY_SERVICE_COUNT);
-		if(act != null){
-			objTitle.add(act);
-		}
-		
-		act = actionMap.get(objType + ":" + CounterConstants.SERVICE_GROUP);
-		if(act != null){
-			objTitle.add(act);
-		}
-		
-		act = actionMap.get(objType + ":" + CounterConstants.UNIQUE_VISITOR);
-		if(act != null){
-			objTitle.add(act);
-		}
-		
-		act = actionMap.get(objType + ":" + CounterConstants.SERVICE_SUMMARY);
-		if(act != null){
-			objTitle.add(act);
-		}
 	}
 
-	public static void removeActionCache(int serverId) {
+	private static void removeActionCache(int serverId) {
 		counterActions.remove(serverId);
 	}
 	
@@ -750,12 +935,15 @@ public class ObjectNavigationView extends ViewPart implements RefreshThread.Refr
 				}
 				return Images.default_context;
 			case 1:
-//				if (obj instanceof AgentObject) {
-//					AgentObject a = (AgentObject) obj;
-//					if (a.isAlive()) {
-//						return ImageCache.getInstance().getObjectImage(a.getObjHash());
-//					}
-//				}
+				if (obj instanceof AgentObject) {
+					AgentObject a = (AgentObject) obj;
+					if (a.isAlive()) {
+						boolean activeStack = a.getSpec().tags.getBoolean("ActiveStack");
+						if (activeStack) {
+							return Images.active;
+						}
+					}
+				}
 			}
 			return null;
 		}

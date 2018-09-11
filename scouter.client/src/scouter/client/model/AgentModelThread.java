@@ -17,6 +17,16 @@
  */
 package scouter.client.model;
 
+import scouter.client.net.INetReader;
+import scouter.client.net.TcpProxy;
+import scouter.client.server.ServerManager;
+import scouter.io.DataInputX;
+import scouter.lang.counters.CounterEngine;
+import scouter.lang.pack.ObjectPack;
+import scouter.lang.value.ListValue;
+import scouter.net.RequestCmd;
+import scouter.util.ThreadUtil;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,17 +35,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-
-import scouter.client.net.INetReader;
-import scouter.client.net.TcpProxy;
-import scouter.client.server.ServerManager;
-import scouter.client.util.ConsoleProxy;
-import scouter.io.DataInputX;
-import scouter.lang.counters.CounterEngine;
-import scouter.lang.pack.ObjectPack;
-import scouter.lang.value.ListValue;
-import scouter.net.RequestCmd;
-import scouter.util.ThreadUtil;
 
 public class AgentModelThread extends Thread {
 
@@ -74,6 +73,7 @@ public class AgentModelThread extends Thread {
 		Map<Integer, AgentObject> tempAgentMap = new HashMap<Integer, AgentObject>();
 		ArrayList<ObjectPack> objectPackList = new ArrayList<ObjectPack>();
 		boolean existUnknownType = false;
+		existServerset.clear();
 		Set<Integer> serverIdSet = ServerManager.getInstance().getOpenServerList();
 		if (serverIdSet.size() > 0) {
 			Integer[] serverIds = serverIdSet.toArray(new Integer[serverIdSet.size()]);
@@ -97,21 +97,24 @@ public class AgentModelThread extends Thread {
 					    if (TextProxy.object.getText(objHash) == null) {
 					    	TextProxy.object.putText(objHash, objName);
 					    }
-						AgentObject agentObject = new AgentObject(objType, objHash, objName, serverId);
 						if (tempAgentMap.containsKey(objHash)) {
 							AgentObject oldAgent = tempAgentMap.get(objHash);
 							if (oldAgent.isAlive()) {
 								continue;
 							}
 						}
+						AgentObject agentObject = new AgentObject(objType, objHash, objName, serverId);
 						tempAgentMap.put(objHash, agentObject);
 						agentObject.objPack = m;
 						if (counterEngine.isUnknownObjectType(objType)) {
 							existUnknownType = true;
 						}
 					}
+					if (agentList.size() > 0) {
+						existServerset.add(serverId);
+					}
 				} catch (Exception e) {
-					ConsoleProxy.errorSafe(e.toString());
+					e.printStackTrace();
 				} finally {
 					TcpProxy.putTcpProxy(proxy);
 				}
@@ -121,6 +124,12 @@ public class AgentModelThread extends Thread {
 		allAgentList = objectPackList;
 		agentMap = tempAgentMap;
 		this.existUnknownType = existUnknownType;
+	}
+	
+	private Set<Integer> existServerset = new HashSet<Integer>();
+	
+	public Set<Integer> existServerSet() {
+		return existServerset;
 	}
 	
 	public AgentObject getAgentObject(int objHash) {
@@ -144,6 +153,16 @@ public class AgentModelThread extends Thread {
 				}
 			}
 		}
+	}
+	
+	public Set<AgentObject> getAgentObjectByServerId (int serverId) {
+		Set<AgentObject> set = new HashSet<AgentObject>();
+		for (AgentObject obj : agentMap.values()) {
+			if (serverId == obj.getServerId()) {
+				set.add(obj);
+			}
+		}
+		return set;
 	}
 	
 	public Set<Integer> getObjectSetByServerId (int serverId) {
@@ -184,6 +203,24 @@ public class AgentModelThread extends Thread {
 			}
 		}
 		return set;
+	}
+
+	public String getLiveObjectHashString(int serverId, String objType) {
+		StringBuilder sb = new StringBuilder();
+		Iterator<Integer> keys = agentMap.keySet().iterator();
+		boolean first = true;
+		while (keys.hasNext()) {
+			AgentObject agent = agentMap.get(keys.next());
+			if (serverId == agent.getServerId() && agent.isAlive() && objType.equals(agent.getObjType())) {
+				if (!first) {
+					sb.append(',');
+				} else {
+					first = false;
+				}
+				sb.append(agent.getObjHash());
+			}
+		}
+		return sb.toString();
 	}
 	
 	public ListValue getLiveObjHashLV(int serverId, String objType) {

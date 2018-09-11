@@ -17,25 +17,24 @@
  */
 package scouter.client.xlog.views;
 
-import java.io.IOException;
-
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.action.Action;
-import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IMenuListener;
-import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.IStatusLineManager;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.dialogs.MessageDialog;
-import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.ControlEvent;
 import org.eclipse.swt.events.ControlListener;
+import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
@@ -47,7 +46,6 @@ import org.eclipse.ui.IMemento;
 import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
-
 import scouter.client.Images;
 import scouter.client.model.AgentDailyListProxy;
 import scouter.client.model.XLogData;
@@ -64,18 +62,22 @@ import scouter.client.util.ExUtil;
 import scouter.client.util.ImageUtil;
 import scouter.client.xlog.XLogUtil;
 import scouter.client.xlog.actions.OpenXLogLoadTimeAction;
+import scouter.io.DataInputX;
 import scouter.lang.pack.MapPack;
 import scouter.lang.pack.Pack;
 import scouter.lang.pack.XLogPack;
 import scouter.lang.value.BooleanValue;
 import scouter.lang.value.DecimalValue;
-import scouter.io.DataInputX;
 import scouter.net.RequestCmd;
 import scouter.util.DateUtil;
+import scouter.util.FormatUtil;
 import scouter.util.ThreadUtil;
 
+import java.io.IOException;
+import java.util.Date;
 
-public class XLogLoadTimeView extends XLogViewCommon implements TimeRangeDialog.ITimeRange, CalendarDialog.ILoadCounterDialog {
+
+public class XLogLoadTimeView extends XLogViewCommon implements TimeRangeDialog.ITimeRange, CalendarDialog.ILoadCalendarDialog {
 
 	public static final String ID = XLogLoadTimeView.class.getName();
 	
@@ -84,7 +86,20 @@ public class XLogLoadTimeView extends XLogViewCommon implements TimeRangeDialog.
 	private int serverId;
 	
 	LoadXLogJob loadJob;
-	
+
+	@Override
+	protected void openInExternalLink() {
+		Program.launch(makeExternalUrl(serverId));
+	}
+
+	@Override
+	protected void clipboardOfExternalLink() {
+		Clipboard clipboard = new Clipboard(getViewSite().getShell().getDisplay());
+		String linkUrl = makeExternalUrl(serverId);
+		clipboard.setContents(new String[]{linkUrl}, new Transfer[]{TextTransfer.getInstance()});
+		clipboard.dispose();
+	}
+
 	public void createPartControl(Composite parent) {
 		display = Display.getCurrent();
 		shell = new Shell(display);
@@ -114,10 +129,10 @@ public class XLogLoadTimeView extends XLogViewCommon implements TimeRangeDialog.
 	    // Add context menu
  		new MenuItem(contextMenu, SWT.SEPARATOR);
  	    MenuItem loadXLogItem = new MenuItem(contextMenu, SWT.PUSH);
- 	    loadXLogItem.setText("Load");
+ 	    loadXLogItem.setText("Load History");
  	    loadXLogItem.addListener(SWT.Selection, new Listener() {
  			public void handleEvent(Event event) {
- 				new OpenXLogLoadTimeAction(PlatformUI.getWorkbench().getActiveWorkbenchWindow(), "Load XLog", objType, Images.server, serverId, stime, etime).run();
+ 				new OpenXLogLoadTimeAction(PlatformUI.getWorkbench().getActiveWorkbenchWindow(), objType, Images.server, serverId, stime, etime).run();
  			}
  		});
 		
@@ -170,7 +185,7 @@ public class XLogLoadTimeView extends XLogViewCommon implements TimeRangeDialog.
 			objTypeDisplay = server.getCounterEngine().getDisplayNameObjectType(objType);
 		}
 		
-		this.setPartName(objTypeDisplay + " - XLog");
+		this.setPartName("XLog - " + objTypeDisplay);
 		setContentDescription("ⓢ"+svrName+" | "+objTypeDisplay+"\'s "+"XLog Pasttime"
 						+ " | " + DateUtil.format(stime, "yyyy-MM-dd") + "(" + DateUtil.format(stime, "HH:mm")
 						+ "~" + DateUtil.format(etime, "HH:mm") + ")");
@@ -277,8 +292,8 @@ public class XLogLoadTimeView extends XLogViewCommon implements TimeRangeDialog.
 				}
 		
 				ConsoleProxy.infoSafe("Load old XLog data");
-				ConsoleProxy.infoSafe("stime :" + DateUtil.timestamp(stime));
-				ConsoleProxy.infoSafe("etime :" + DateUtil.timestamp(etime));
+				ConsoleProxy.infoSafe("stime :" + FormatUtil.print(new Date(stime), "yyyyMMdd HH:mm:ss.SSS"));
+				ConsoleProxy.infoSafe("etime :" + FormatUtil.print(new Date(etime), "yyyyMMdd HH:mm:ss.SSS"));
 				ConsoleProxy.infoSafe("objType :" + objType);
 				ConsoleProxy.infoSafe("limit :" + limit + "   max:"+max);
 				

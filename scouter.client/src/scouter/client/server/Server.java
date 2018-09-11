@@ -18,7 +18,6 @@
 package scouter.client.server;
 
 import scouter.client.net.ConnectionPool;
-import scouter.client.views.ObjectNavigationView;
 import scouter.lang.counters.CounterEngine;
 import scouter.lang.value.MapValue;
 import scouter.util.HashUtil;
@@ -39,12 +38,20 @@ public class Server {
 	private String encryptedPass;
 	private String group;
 	private String version;
+	private String recommendedClientVersion;
 	private String email;
+	private boolean secureMode = true;
 	
 	private boolean open = false;
 	
 	private long usedMemory;
 	private long totalMemory;
+	private boolean dirty = false;
+	
+	private int soTimeOut = 8000;
+
+	private String extLinkName;
+	private String extLinkUrlPattern;
 	
 	private MapValue groupPolicyMap = new MapValue();
 	private MapValue menuEnableMap = new MapValue();
@@ -106,8 +113,6 @@ public class Server {
 	
 	public void setConnected(boolean isConnected) {
 		this.connected = isConnected;
-		if (isConnected == false)
-			ObjectNavigationView.removeActionCache(getId());
 	}
 	
 	public String getTimezone() {
@@ -158,6 +163,13 @@ public class Server {
 
 	public void setVersion(String version) {
 		this.version = version;
+	}
+
+	public String getRecommendedClientVersion() {
+		return this.recommendedClientVersion;
+	}
+	public void setRecommendedClientVersion(String recommendedClientVersion) {
+		this.recommendedClientVersion = recommendedClientVersion;
 	}
 	
 	public void setGroupPolicy(MapValue mv) {
@@ -210,6 +222,50 @@ public class Server {
 	
 	public boolean isEnableMenu(String key) {
 		return menuEnableMap.getBoolean(key);
+	}
+	
+	public void setDirty(boolean dirty) {
+		this.dirty = dirty;
+	}
+	
+	public boolean isDirty() {
+		return this.dirty;
+	}
+	
+	public long getCurrentTime() {
+		return System.currentTimeMillis() + getDelta();
+	}
+	
+	public int getSoTimeOut() {
+		return soTimeOut;
+	}
+
+	public void setSoTimeOut(int soTimeOut) {
+		this.soTimeOut = soTimeOut;
+	}
+
+	public String getExtLinkName() {
+		return extLinkName;
+	}
+
+	public void setExtLinkName(String extLinkName) {
+		this.extLinkName = extLinkName;
+	}
+
+	public String getExtLinkUrlPattern() {
+		return extLinkUrlPattern;
+	}
+
+	public void setExtLinkUrlPattern(String extLinkUrlPattern) {
+		this.extLinkUrlPattern = extLinkUrlPattern;
+	}
+
+	public boolean isSecureMode() {
+		return secureMode;
+	}
+
+	public void setSecureMode(boolean secureMode) {
+		this.secureMode = secureMode;
 	}
 
 	public String toString() {

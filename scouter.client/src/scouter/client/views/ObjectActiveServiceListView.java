@@ -17,50 +17,27 @@
  */
 package scouter.client.views;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.layout.TableColumnLayout;
-import org.eclipse.jface.viewers.ArrayContentProvider;
-import org.eclipse.jface.viewers.ColumnWeightData;
-import org.eclipse.jface.viewers.DoubleClickEvent;
-import org.eclipse.jface.viewers.IColorProvider;
-import org.eclipse.jface.viewers.IDoubleClickListener;
-import org.eclipse.jface.viewers.ILabelProviderListener;
-import org.eclipse.jface.viewers.ITableLabelProvider;
-import org.eclipse.jface.viewers.StructuredSelection;
-import org.eclipse.jface.viewers.TableViewer;
-import org.eclipse.jface.viewers.TableViewerColumn;
+import org.eclipse.jface.viewers.*;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
-import org.eclipse.swt.widgets.Monitor;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
-import org.eclipse.ui.IViewReference;
-import org.eclipse.ui.IViewSite;
-import org.eclipse.ui.IWorkbenchPage;
-import org.eclipse.ui.IWorkbenchWindow;
-import org.eclipse.ui.PartInitException;
-import org.eclipse.ui.PlatformUI;
-import org.eclipse.ui.internal.WorkbenchPage;
+import org.eclipse.ui.*;
 import org.eclipse.ui.part.ViewPart;
-
 import scouter.client.Images;
 import scouter.client.model.AgentDataProxy;
-import scouter.client.model.DetachedManager;
 import scouter.client.model.RefreshThread;
 import scouter.client.model.RefreshThread.Refreshable;
 import scouter.client.model.TextProxy;
@@ -70,7 +47,6 @@ import scouter.client.sorter.TableLabelSorter;
 import scouter.client.util.ColorUtil;
 import scouter.client.util.ExUtil;
 import scouter.client.util.ImageUtil;
-import scouter.client.util.ScouterUtil;
 import scouter.lang.counters.CounterEngine;
 import scouter.lang.pack.MapPack;
 import scouter.lang.pack.Pack;
@@ -78,7 +54,13 @@ import scouter.lang.value.DecimalValue;
 import scouter.lang.value.ListValue;
 import scouter.util.CastUtil;
 import scouter.util.FormatUtil;
+import scouter.util.Hexa32;
 import scouter.util.StringUtil;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 public class ObjectActiveServiceListView extends ViewPart implements Refreshable {
 	
@@ -176,7 +158,7 @@ public class ObjectActiveServiceListView extends ViewPart implements Refreshable
 					try {
 						IWorkbenchWindow win = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
 						ObjectThreadDetailView view = (ObjectThreadDetailView) win.getActivePage().showView(ObjectThreadDetailView.ID, serverId + "&" + data.objHash, IWorkbenchPage.VIEW_ACTIVATE);
-						view.setInput(data.id);
+						view.setInput(data.id, Hexa32.toLong32(data.txid));
 					} catch (Exception d) {
 					}
 				}
@@ -216,30 +198,40 @@ public class ObjectActiveServiceListView extends ViewPart implements Refreshable
 			ListValue txidLv = mpack.getList("txid");
 			ListValue elapsedLv = mpack.getList("elapsed");
 			ListValue serviceLv = mpack.getList("service");
+			ListValue ipLv = mpack.getList("ip");
 			ListValue sqlLv = mpack.getList("sql");
 			ListValue subcallLv = mpack.getList("subcall");
 			
-			int size = idLv.size();
-			count.value = count.value + size;
-			
-			for (int i = 0; i < size; i++) {
-				ThreadData data = new ThreadData();
-				data.id = idLv.getLong(i);
-				data.objHash = objHash;
-				data.name = nameLv.getString(i);
-				data.state = statLv.getString(i);
-				data.cpu = cpuLv.getLong(i);
-				data.txid = txidLv.getString(i);
-				data.elapsed = elapsedLv.getLong(i);
-				data.serviceName = serviceLv.getString(i);
-				String sql = sqlLv.getString(i);
-				if (StringUtil.isNotEmpty(sql)) {
-					data.note = sql;
-				} else {
-					data.note = subcallLv.getString(i);
+			if (idLv != null) {
+				int size = idLv.size();
+				count.value = count.value + size;
+				
+				for (int i = 0; i < size; i++) {
+					ThreadData data = new ThreadData();
+					data.id = idLv.getLong(i);
+					data.objHash = objHash;
+					data.name = nameLv.getString(i);
+					data.state = statLv.getString(i);
+					data.cpu = cpuLv.getLong(i);
+					data.txid = txidLv.getString(i);
+					data.elapsed = elapsedLv.getLong(i);
+					data.serviceName = serviceLv.getString(i);
+					String sql = sqlLv.getString(i);
+					if (StringUtil.isNotEmpty(sql)) {
+						data.note = sql;
+					} else {
+						data.note = subcallLv.getString(i);
+					}
+					if (ipLv != null)
+						data.ip = ipLv.getString(i);
+					datas.add(data);
 				}
-				datas.add(data);
 			}
+			Collections.sort(datas, new Comparator<ThreadData>() {
+				public int compare(ThreadData o1, ThreadData o2) {
+					return o1.elapsed > o2.elapsed ? -1 : 1;
+				}
+			});
 		}
 		if (error.length() > 0) {
 			error.append("may be not loaded.");
@@ -345,6 +337,8 @@ public class ObjectActiveServiceListView extends ViewPart implements Refreshable
 					return ((ThreadData) element).serviceName;
 				} else if (columnIndex == ColumnEnum.NOTE.getIndex()) {
 					return ((ThreadData) element).note;
+				} else if (columnIndex == ColumnEnum.IP.getIndex()) {
+					return ((ThreadData) element).ip;
 				}
 			}
 			return null;
@@ -355,15 +349,16 @@ public class ObjectActiveServiceListView extends ViewPart implements Refreshable
 	}
 
 	enum ColumnEnum {
-		NO("No", 40, SWT.RIGHT, true, true, true, 0),
-	    OBJNAME("ObjName", 150, SWT.LEFT, true, true, false, 1),
-	    NAME("Name", 250, SWT.LEFT, true, true, false, 2),
-	    STATE("State", 100, SWT.CENTER, true, true, false, 3),
-	    CPU("Cpu", 60, SWT.RIGHT, true, true, true, 4),
-	    ELAPSED("Elapsed", 60, SWT.RIGHT, true, true, true, 5),
-	    TXID("TxId", 70, SWT.LEFT, true, true, false, 6),
-	    SERVICE("Service", 200, SWT.LEFT, true, true, false, 7),
-	    NOTE("Note", 300, SWT.LEFT, true, true, false, 8);
+		OBJNAME("ObjectName", 150, SWT.LEFT, true, true, false, 0),
+		SERVICE("Service", 200, SWT.LEFT, true, true, false, 1),
+		ELAPSED("Elapsed", 60, SWT.RIGHT, true, true, true, 2),
+		NOTE("Note", 200, SWT.LEFT, true, true, false, 3),
+		CPU("Cpu", 60, SWT.RIGHT, true, true, true, 4),
+		IP("IP", 100, SWT.LEFT, true, true, false, 5),
+		STATE("State", 100, SWT.LEFT, true, true, false, 6),
+		NAME("Name", 250, SWT.LEFT, true, true, false, 7),
+		NO("No", 40, SWT.RIGHT, true, true, true, 8),
+	    TXID("TxId", 70, SWT.LEFT, true, true, false, 9);
 
 	    private final String title;
 	    private final int width;

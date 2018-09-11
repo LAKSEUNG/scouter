@@ -17,14 +17,17 @@
  */
 package scouter.client.xlog.views;
 
-import java.io.IOException;
-
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IStatusLineManager;
 import org.eclipse.jface.action.IToolBarManager;
+import org.eclipse.jface.action.Separator;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.ControlEvent;
 import org.eclipse.swt.events.ControlListener;
+import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
@@ -34,8 +37,8 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
-
 import scouter.client.Images;
+import scouter.client.model.AgentDailyListProxy;
 import scouter.client.model.AgentModelThread;
 import scouter.client.model.RefreshThread;
 import scouter.client.model.RefreshThread.Refreshable;
@@ -59,10 +62,13 @@ import scouter.lang.pack.Pack;
 import scouter.lang.pack.PackEnum;
 import scouter.lang.pack.XLogPack;
 import scouter.lang.value.BooleanValue;
+import scouter.lang.value.ListValue;
 import scouter.net.RequestCmd;
 import scouter.util.CastUtil;
 import scouter.util.DateUtil;
 import scouter.util.StringUtil;
+
+import java.io.IOException;
 
 
 public class XLogRealTimeView extends XLogViewCommon implements Refreshable {
@@ -85,13 +91,34 @@ public class XLogRealTimeView extends XLogViewCommon implements Refreshable {
 		this.objType = ids[1];
 	}
 
+	@Override
+	protected void openInExternalLink() {
+		Program.launch(makeExternalUrl(serverId));
+	}
+
+	@Override
+	protected void clipboardOfExternalLink() {
+		Clipboard clipboard = new Clipboard(getViewSite().getShell().getDisplay());
+		String linkUrl = makeExternalUrl(serverId);
+		clipboard.setContents(new String[]{linkUrl}, new Transfer[]{TextTransfer.getInstance()});
+		clipboard.dispose();
+	}
+
 	public void createPartControl(final Composite parent) {
 		display = Display.getCurrent();
 		shell = new Shell(display);
 		IToolBarManager man = getViewSite().getActionBars().getToolBarManager();
 
 		create(parent, man);
-		
+
+		Action searchOpenAction = new Action("search", ImageUtil.getImageDescriptor(Images.search)) {
+			public void run() {
+				new OpenSearchXLogDialogAction(PlatformUI.getWorkbench().getActiveWorkbenchWindow(), serverId, objType).run();
+			}
+		};
+		man.add(searchOpenAction);
+		man.add(new Separator());
+		;
 		man.add(new Action("zoom in", ImageUtil.getImageDescriptor(Images.zoomin)) {
 			public void run() {
 				viewPainter.keyPressed(16777259);
@@ -117,7 +144,7 @@ public class XLogRealTimeView extends XLogViewCommon implements Refreshable {
 		// Add context menu
 		new MenuItem(contextMenu, SWT.SEPARATOR);
 	    MenuItem loadXLogItem = new MenuItem(contextMenu, SWT.PUSH);
-	    loadXLogItem.setText("Load");
+	    loadXLogItem.setText("Load History");
 	    loadXLogItem.addListener(SWT.Selection, new Listener() {
 			public void handleEvent(Event event) {
 				new OpenXLogLoadTimeAction(PlatformUI.getWorkbench().getActiveWorkbenchWindow(), "Load XLog", objType, Images.server, serverId).run();
@@ -142,7 +169,7 @@ public class XLogRealTimeView extends XLogViewCommon implements Refreshable {
 			objTypeDisplay = server.getCounterEngine().getDisplayNameObjectType(objType);
 			viewPainter.setServerId(serverId);
 		}
-		this.setPartName(objTypeDisplay + " - XLog");
+		this.setPartName("XLog - " + objTypeDisplay);
 		setContentDescription("ⓢ"+svrName+" | "+objTypeDisplay+"\'s "+"XLog Realtime");
 		thread = new RefreshThread(this, 2000);
 		thread.setName(this.toString() + " - " + "objType:"+objType + ", serverId:"+serverId);
@@ -161,27 +188,30 @@ public class XLogRealTimeView extends XLogViewCommon implements Refreshable {
 	public void refresh() {
 		setDate(DateUtil.yyyymmdd(TimeUtil.getCurrentTime(serverId)));
 		TcpProxy tcp = TcpProxy.getTcpProxy(serverId);
-		try {
-			param.put("objHash", agentThread.getLiveObjHashLV(serverId, objType));
-			int limit = PManager.getInstance().getInt(PreferenceConstants.P_XLOG_IGNORE_TIME);
-			param.put("limit", limit);
-		
-			twdata.setMax(getMaxCount());
-			tcp.process(RequestCmd.TRANX_REAL_TIME_GROUP, param, new INetReader() {
-				public void process(DataInputX in) throws IOException {
-					Pack p = in.readPack();
-					if (p.getPackType() == PackEnum.MAP) {
-						 param = (MapPack) p;
-					} else {
-						XLogPack x = XLogUtil.toXLogPack(p);
-						twdata.putLast(x.txid, new XLogData(x, serverId));
+		ListValue objHashLv = agentThread.getLiveObjHashLV(serverId, objType);
+		if (objHashLv.size() > 0) {
+			try {
+				param.put("objHash", objHashLv);
+				int limit = PManager.getInstance().getInt(PreferenceConstants.P_XLOG_IGNORE_TIME);
+				param.put("limit", limit);
+			
+				twdata.setMax(getMaxCount());
+				tcp.process(RequestCmd.TRANX_REAL_TIME_GROUP, param, new INetReader() {
+					public void process(DataInputX in) throws IOException {
+						Pack p = in.readPack();
+						if (p.getPackType() == PackEnum.MAP) {
+							 param = (MapPack) p;
+						} else {
+							XLogPack x = XLogUtil.toXLogPack(p);
+							twdata.putLast(x.txid, new XLogData(x, serverId));
+						}
 					}
-				}
-			});
-		} catch(Exception e){
-			ConsoleProxy.errorSafe(e.toString());
-		} finally {
-			TcpProxy.putTcpProxy(tcp);
+				});
+			} catch(Exception e){
+				ConsoleProxy.errorSafe(e.toString());
+			} finally {
+				TcpProxy.putTcpProxy(tcp);
+			}
 		}
 		ExUtil.asyncRun(new Runnable() {
 			public void run() {
@@ -196,15 +226,19 @@ public class XLogRealTimeView extends XLogViewCommon implements Refreshable {
 
 	}
 	
+	AgentDailyListProxy agnetProxy = new AgentDailyListProxy();
+	
 	public void loadAdditinalData(long stime, long etime, final boolean reverse) {
+		viewPainter.setViewIsInAdditionalDataLoading(true);
 		int max = getMaxCount();
 		TcpProxy tcp = TcpProxy.getTcpProxy(serverId);
 		try {
 			MapPack param = new MapPack();
-			param.put("date", DateUtil.yyyymmdd(stime));
+			String date = DateUtil.yyyymmdd(stime);
+			param.put("date", date);
 			param.put("stime", stime);
 			param.put("etime", etime);
-			param.put("objHash", agentThread.getLiveObjHashLV(serverId, objType));
+			param.put("objHash", agnetProxy.getObjHashLv(date, serverId, objType));
 			param.put("reverse", new BooleanValue(reverse));
 			int limit = PManager.getInstance().getInt(PreferenceConstants.P_XLOG_IGNORE_TIME);
 			if (limit > 0) {
@@ -228,6 +262,7 @@ public class XLogRealTimeView extends XLogViewCommon implements Refreshable {
 		} catch (Throwable t) {
 			ConsoleProxy.errorSafe(t.toString());
 		} finally {
+			viewPainter.setViewIsInAdditionalDataLoading(false);
 			TcpProxy.putTcpProxy(tcp);
 		}
 	}

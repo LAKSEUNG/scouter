@@ -29,7 +29,7 @@ import scouter.client.popup.CalendarDialog;
 import scouter.client.util.ImageUtil;
 import scouter.util.DateUtil;
 
-public class OpenDailyServiceCountAction extends Action implements CalendarDialog.ILoadCounterDialog {
+public class OpenDailyServiceCountAction extends Action implements CalendarDialog.ILoadCalendarDialog {
 	public final static String ID = OpenDailyServiceCountAction.class.getName();
 
 	private final IWorkbenchWindow window;
@@ -38,17 +38,17 @@ public class OpenDailyServiceCountAction extends Action implements CalendarDialo
 	private int serverId;
 	private String date;
 
-	public OpenDailyServiceCountAction(IWorkbenchWindow window, String label, String objType, String counter, Image image, int serverId) {
-		this(window, label, objType, counter, image, serverId, null);
+	public OpenDailyServiceCountAction(IWorkbenchWindow window, String objType, String counter, Image image, int serverId) {
+		this(window, objType, counter, image, serverId, null);
 	}
 	
-	public OpenDailyServiceCountAction(IWorkbenchWindow window, String label, String objType, String counter, Image image, int serverId, String date) {
+	public OpenDailyServiceCountAction(IWorkbenchWindow window, String objType, String counter, Image image, int serverId, String date) {
 		this.window = window;
 		this.objType = objType;
 		this.counter = counter;
 		this.serverId = serverId;
 		this.date = date;
-		setText(label);
+		setText("24H Service Count");
 		setId(ID);
 		setImageDescriptor(ImageUtil.getImageDescriptor(image));
 	}

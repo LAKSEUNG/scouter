@@ -11,15 +11,15 @@
 		<module>../scouter.client.product</module>
 	</modules>
 	<properties>
-		<tycho-version>0.19.0</tycho-version>
-		<indigo.repo-url>http://download.eclipse.org/releases/indigo</indigo.repo-url>
+		<tycho-version>0.26.0</tycho-version>
+		<neon.repo-url>http://download.eclipse.org/releases/neon</neon.repo-url>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 	<repositories>
 		<repository>
-			<id>eclipse-indigo</id>
+			<id>eclipse-neon</id>
 			<layout>p2</layout>
-			<url>${indigo.repo-url}</url>
+			<url>${neon.repo-url}</url>
 		</repository>
 	</repositories>
 	<build>

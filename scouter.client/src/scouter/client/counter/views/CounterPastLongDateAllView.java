@@ -17,15 +17,9 @@
  */
 package scouter.client.counter.views;
 
-import java.io.FileWriter;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
+import au.com.bytecode.opencsv.CSVWriter;
 import org.csstudio.swt.xygraph.dataprovider.CircularBufferDataProvider;
+import org.csstudio.swt.xygraph.dataprovider.ISample;
 import org.csstudio.swt.xygraph.dataprovider.Sample;
 import org.csstudio.swt.xygraph.figures.Trace;
 import org.csstudio.swt.xygraph.figures.Trace.PointStyle;
@@ -40,13 +34,18 @@ import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.action.Separator;
+import org.eclipse.jface.window.DefaultToolTip;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ControlEvent;
 import org.eclipse.swt.events.ControlListener;
 import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.events.KeyListener;
+import org.eclipse.swt.events.MouseEvent;
+import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -57,17 +56,10 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
-import org.eclipse.ui.IMemento;
-import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.IWorkbenchWindow;
-import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
-
-import au.com.bytecode.opencsv.CSVWriter;
-
 import scouter.client.Images;
 import scouter.client.counter.actions.OpenPastLongDateAllAction;
-import scouter.client.counter.views.CounterPastTimeAllView.ExportDataTask;
 import scouter.client.model.AgentColorManager;
 import scouter.client.model.TextProxy;
 import scouter.client.net.INetReader;
@@ -84,6 +76,7 @@ import scouter.client.util.CounterUtil;
 import scouter.client.util.ExUtil;
 import scouter.client.util.ImageUtil;
 import scouter.client.util.MenuUtil;
+import scouter.client.util.ScouterUtil;
 import scouter.client.util.TimeUtil;
 import scouter.client.util.TimedSeries;
 import scouter.client.util.UIUtil;
@@ -92,15 +85,21 @@ import scouter.io.DataInputX;
 import scouter.lang.pack.MapPack;
 import scouter.lang.value.ListValue;
 import scouter.net.RequestCmd;
-import scouter.util.CastUtil;
 import scouter.util.DateUtil;
 import scouter.util.FormatUtil;
 import scouter.util.StringUtil;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
 public class CounterPastLongDateAllView extends ScouterViewPart implements DualCalendarDialog.ILoadDualCounterDialog {
 	public static final String ID = CounterPastLongDateAllView.class.getName();
 
-	private IMemento memento;
 	protected String objType;
 	protected String counter;
 	protected int serverId;
@@ -111,6 +110,7 @@ public class CounterPastLongDateAllView extends ScouterViewPart implements DualC
 	Combo periodCombo;
 	Composite headerComp;
 	Button applyBtn;
+	Trace nearestTrace;
 
 	IWorkbenchWindow window;
 	IToolBarManager man;
@@ -120,12 +120,6 @@ public class CounterPastLongDateAllView extends ScouterViewPart implements DualC
 	
 	boolean actionReg = false;
 	
-	@Override
-	public void init(IViewSite site, IMemento memento) throws PartInitException {
-		super.init(site, memento);
-		this.memento = memento;
-	}
-
 	public String getCount() {
 		return counter;
 	}
@@ -148,9 +142,9 @@ public class CounterPastLongDateAllView extends ScouterViewPart implements DualC
 		if(server != null){
 			counterUnit = server.getCounterEngine().getCounterUnit(objType, counter);
 			counterDisplay = server.getCounterEngine().getCounterDisplayName(objType, counter);
-			desc = "(Period) [" + sDate.substring(0, 4) + "-" + sDate.substring(4, 6) + "-" + sDate.substring(6, 8) + 
+			desc = "(Daily All) [" + sDate.substring(0, 4) + "-" + sDate.substring(4, 6) + "-" + sDate.substring(6, 8) + 
 					" ~ " + eDate.substring(0, 4) + "-" + eDate.substring(4, 6) + "-" + eDate.substring(6, 8) +
-					"] All " + counterDisplay;
+					"]" + counterDisplay;
 		}
 		serverText.setText("ⓢ"+((server == null)? "?":server.getName())+" |"+(!"".equals(counterUnit)?" ("+counterUnit+")":""));
 		sDateText.setText(DateUtil.format(stime, "yyyy-MM-dd"));
@@ -164,8 +158,8 @@ public class CounterPastLongDateAllView extends ScouterViewPart implements DualC
 			this.xyGraph.removeTrace(tr);
 		}
 		traces.clear();
-		
-		MenuUtil.createCounterContextMenu(ID, canvas, serverId, objType, counter);
+
+		MenuUtil.createCounterContextMenu(ID, canvas, serverId, objType, counter, stime, etime);
 		
 		ExUtil.asyncRun(new Runnable() {
 			public void run() {
@@ -309,7 +303,52 @@ public class CounterPastLongDateAllView extends ScouterViewPart implements DualC
 		
 		
 		man = getViewSite().getActionBars().getToolBarManager();
-		
+		final DefaultToolTip toolTip = new DefaultToolTip(canvas, DefaultToolTip.RECREATE, true);
+		toolTip.setFont(new Font(null, "Arial", 10, SWT.BOLD));
+		toolTip.setBackgroundColor(Display.getCurrent().getSystemColor(SWT.COLOR_INFO_BACKGROUND));
+		canvas.addMouseListener(new MouseListener() {
+			public void mouseUp(MouseEvent e) {
+				if (nearestTrace != null) {
+					nearestTrace.setLineWidth(PManager.getInstance().getInt(PreferenceConstants.P_CHART_LINE_WIDTH));
+					nearestTrace = null;
+				}
+				toolTip.hide();
+			}
+			
+			public void mouseDown(MouseEvent e) {
+				double x = xyGraph.primaryXAxis.getPositionValue(e.x, false);
+				double y = xyGraph.primaryYAxis.getPositionValue(e.y, false);
+				if (x < 0 || y < 0) {
+					return;
+				}
+				double minDistance = 30.0d;
+				long time = 0;
+				double value = 0;
+				for (Trace t : traces.values()) {
+					ISample s = ScouterUtil.getNearestPoint(t.getDataProvider(), x);
+					if (s != null) {
+						int x2 = xyGraph.primaryXAxis.getValuePosition(s.getXValue(), false);
+						int y2 = xyGraph.primaryYAxis.getValuePosition(s.getYValue(), false);
+						double distance = ScouterUtil.getPointDistance(e.x, e.y, x2, y2);
+						if (minDistance > distance) {
+							minDistance = distance;
+							nearestTrace = t;
+							time = (long) s.getXValue();
+							value = s.getYValue();
+						}
+					}
+				}
+				if (nearestTrace != null) {
+					int width = PManager.getInstance().getInt(PreferenceConstants.P_CHART_LINE_WIDTH);
+					nearestTrace.setLineWidth(width + 2);
+					toolTip.setText(nearestTrace.getName()
+							+ "\nTime : " + DateUtil.format(time, "HH:mm")
+							+ "\nValue : " +  FormatUtil.print(value, "#,###.##"));
+					toolTip.show(new Point(e.x, e.y));
+				}
+			}
+			public void mouseDoubleClick(MouseEvent e) {}
+		});
 		canvas.addKeyListener(new KeyListener() {
 			public void keyReleased(KeyEvent e) {
 			}
@@ -369,8 +408,6 @@ public class CounterPastLongDateAllView extends ScouterViewPart implements DualC
 				}
 			}
 		});
-		
-		restoreState();
 	}
 	
 	private void createUpperMenu(Composite composite) {
@@ -515,32 +552,6 @@ public class CounterPastLongDateAllView extends ScouterViewPart implements DualC
 		return trace;
 	}
 	
-	public void saveState(IMemento memento) {
-		super.saveState(memento);
-		memento = memento.createChild(ID);
-		memento.putString("counter", counter);
-		memento.putString("objType", objType);
-		memento.putString("sDate", this.sDate);
-		memento.putString("eDate", this.eDate);
-		memento.putInteger("serverId", serverId);
-	}
-
-	private void restoreState() {
-		if (memento == null)
-			return;
-		IMemento m = memento.getChild(ID);
-		String counter = m.getString("counter");
-		String objType = m.getString("objType");
-		String sDate = CastUtil.cString(m.getString("sDate"));
-		String eDate = CastUtil.cString(m.getString("eDate"));
-		int serverId = CastUtil.cint(m.getInteger("serverId"));
-		try {
-			setInput(sDate, eDate, objType, counter, serverId);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
-
 	public void onPressedOk(long startTime, long endTime) {
 	}
 	public void onPressedCancel() {

@@ -17,12 +17,8 @@
  */
 package scouter.client.counter.views;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-
 import org.csstudio.swt.xygraph.dataprovider.CircularBufferDataProvider;
+import org.csstudio.swt.xygraph.dataprovider.ISample;
 import org.csstudio.swt.xygraph.dataprovider.Sample;
 import org.csstudio.swt.xygraph.figures.Trace;
 import org.csstudio.swt.xygraph.figures.Trace.PointStyle;
@@ -40,12 +36,7 @@ import org.eclipse.swt.events.KeyListener;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.graphics.Font;
-import org.eclipse.swt.graphics.GC;
-import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.graphics.ImageData;
-import org.eclipse.swt.graphics.PaletteData;
 import org.eclipse.swt.graphics.Point;
-import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
@@ -54,7 +45,6 @@ import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
-
 import scouter.client.Images;
 import scouter.client.model.AgentColorManager;
 import scouter.client.model.AgentModelThread;
@@ -80,15 +70,20 @@ import scouter.client.util.MenuUtil;
 import scouter.client.util.ScouterUtil;
 import scouter.client.util.TimeUtil;
 import scouter.client.views.ScouterViewPart;
+import scouter.io.DataInputX;
 import scouter.lang.pack.MapPack;
 import scouter.lang.value.ListValue;
-import scouter.io.DataInputX;
 import scouter.net.RequestCmd;
 import scouter.util.CastUtil;
 import scouter.util.DateUtil;
 import scouter.util.FormatUtil;
 import scouter.util.HashUtil;
 import scouter.util.StringUtil;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class CounterTodayAllView extends ScouterViewPart implements Refreshable, IObjectCheckListener {
 	public static final String ID = CounterTodayAllView.class.getName();
@@ -101,6 +96,7 @@ public class CounterTodayAllView extends ScouterViewPart implements Refreshable,
 
 	IWorkbenchWindow window;
 	IToolBarManager man;
+	Trace nearestTrace;
 	
 	public void init(IViewSite site) throws PartInitException {
 		super.init(site);
@@ -187,7 +183,7 @@ public class CounterTodayAllView extends ScouterViewPart implements Refreshable,
 				int width = PManager.getInstance().getInt(PreferenceConstants.P_CHART_LINE_WIDTH);
 				synchronized (traces) {
 					for (Trace t : traces) {
-						if (selectedMode == false && t.getLineWidth() != width) {
+						if (nearestTrace == null && t.getLineWidth() != width) {
 							t.setLineWidth(width);
 						}
 						int objHash = HashUtil.hash(t.getName());
@@ -283,51 +279,44 @@ public class CounterTodayAllView extends ScouterViewPart implements Refreshable,
 		toolTip.setBackgroundColor(Display.getCurrent().getSystemColor(SWT.COLOR_INFO_BACKGROUND));
 		canvas.addMouseListener(new MouseListener() {
 			public void mouseUp(MouseEvent e) {
-				onDeselectObject();
+				if (nearestTrace != null) {
+					nearestTrace.setLineWidth(PManager.getInstance().getInt(PreferenceConstants.P_CHART_LINE_WIDTH));
+					nearestTrace = null;
+				}
 				toolTip.hide();
 			}
+			
 			public void mouseDown(MouseEvent e) {
 				double x = xyGraph.primaryXAxis.getPositionValue(e.x, false);
 				double y = xyGraph.primaryYAxis.getPositionValue(e.y, false);
 				if (x < 0 || y < 0) {
 					return;
 				}
-				Image image = new Image(e.display, 1, 10);
-				GC gc = new GC((FigureCanvas)e.widget);
-				gc.copyArea(image, e.x, e.y > 5 ? e.y - 5 : 0);
-				ImageData imageData = image.getImageData();
-				PaletteData palette = imageData.palette;
-				RGB white = new RGB(255, 255, 255);
-				int point = 5;
-				int offset = 0;
-				while (point >= 0 && point < 10) {
-					int pixelValue = imageData.getPixel(0, point);
-					RGB rgb = palette.getRGB(pixelValue);
-					if (white.equals(rgb) == false) {
-						int objHash = AgentColorManager.getInstance().getObjectHash(rgb);
-						if (objHash != 0) {
-							String objName = TextProxy.object.getText(objHash);
-							double time = xyGraph.primaryXAxis.getPositionValue(e.x, false);
-							double v = 0.0d;
-							for (Trace t : traces) {
-								if (t.getName().equals(objName)) {
-									v = ScouterUtil.getNearestValue(t.getDataProvider(), time);
-									String value = FormatUtil.print(v, "#,###.##");
-									toolTip.setText(objName + "\nvalue : " + value);
-									toolTip.show(new Point(e.x, e.y));
-									onSelectObject(objHash, objName, objType);
-									break;
-								}
-							}
-							break;
+				double minDistance = 30.0d;
+				long time = 0;
+				double value = 0;
+				for (Trace t : traces) {
+					ISample s = ScouterUtil.getNearestPoint(t.getDataProvider(), x);
+					if (s != null) {
+						int x2 = xyGraph.primaryXAxis.getValuePosition(s.getXValue(), false);
+						int y2 = xyGraph.primaryYAxis.getValuePosition(s.getYValue(), false);
+						double distance = ScouterUtil.getPointDistance(e.x, e.y, x2, y2);
+						if (minDistance > distance) {
+							minDistance = distance;
+							nearestTrace = t;
+							time = (long) s.getXValue();
+							value = s.getYValue();
 						}
 					}
-					offset = offset >= 0 ? offset + 1 : offset - 1;
-					offset *= -1;
-					point += offset; 
 				}
-				gc.dispose();
-				image.dispose();
+				if (nearestTrace != null) {
+					int width = PManager.getInstance().getInt(PreferenceConstants.P_CHART_LINE_WIDTH);
+					nearestTrace.setLineWidth(width + 2);
+					toolTip.setText(nearestTrace.getName()
+							+ "\nTime : " + DateUtil.format(time, "HH:mm")
+							+ "\nValue : " +  FormatUtil.print(value, "#,###.##"));
+					toolTip.show(new Point(e.x, e.y));
+				}
 			}
 			public void mouseDoubleClick(MouseEvent e) {}
 		});
@@ -358,13 +347,17 @@ public class CounterTodayAllView extends ScouterViewPart implements Refreshable,
 			counterDisplay = server.getCounterEngine().getCounterDisplayName(objType, counter);
 			counterUnit = server.getCounterEngine().getCounterUnit(objType, counter);
 		}
-		desc = "ⓢ"+svrName+" | (Today) [" + date.substring(0, 4) + "-" + date.substring(4, 6) + "-" + date.substring(6, 8) + "] All " + counterDisplay+(!"".equals(counterUnit)?" ("+counterUnit+")":"");
+		desc = "ⓢ"+svrName+" | (Today All) [" + date.substring(0, 4) + "-" + date.substring(4, 6) + "-" + date.substring(6, 8) + "]" + counterDisplay+(!"".equals(counterUnit)?" ("+counterUnit+")":"");
 		try {
 			setViewTab(objType, counter, serverId);
 		} catch (Exception e1) {
 			e1.printStackTrace();
 		}
-		MenuUtil.createCounterContextMenu(ID, canvas, serverId, objType, counter);
+
+		long from = DateUtil.yyyymmdd(date);
+		long to = from + DateUtil.MILLIS_PER_DAY;
+
+		MenuUtil.createCounterContextMenu(ID, canvas, serverId, objType, counter, from, to);
 		thread = new RefreshThread(this, 10000);
 		thread.setName(this.toString() + " - " + "objType:"+objType + ", counter:"+counter + ", serverId:"+serverId);
 		thread.start();
@@ -412,38 +405,6 @@ public class CounterTodayAllView extends ScouterViewPart implements Refreshable,
 		ObjectSelectManager.getInstance().removeObjectCheckStateListener(this);
 	}
 
-	boolean selectedMode = false;
-	
-	public void onSelectObject(int objHash, final String objName, String objType) {
-		if (this.objType.equals(objType) == false) {
-			return;
-		}
-		ExUtil.exec(canvas, new Runnable() {
-			public void run() {
-				int width = PManager.getInstance().getInt(PreferenceConstants.P_CHART_LINE_WIDTH);
-				for (Trace t : traces) {
-					if (t.getName().equals(objName)) {
-						t.setLineWidth(width + 2);
-						selectedMode = true;
-						break;
-					}
-				}
-			}
-		});
-	}
-
-	public void onDeselectObject() {
-		ExUtil.exec(canvas, new Runnable() {
-			public void run() {
-				int width = PManager.getInstance().getInt(PreferenceConstants.P_CHART_LINE_WIDTH);
-				for (Trace t : traces) {
-					t.setLineWidth(width);
-				}
-				selectedMode = false;
-			}
-		});
-	}
-	
 	public void redraw() {
 		if (canvas != null && canvas.isDisposed() == false) {
 			canvas.redraw();

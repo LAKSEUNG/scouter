@@ -21,10 +21,14 @@ package scouter.client;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.PropertyResourceBundle;
+import java.util.Set;
 
 import org.eclipse.core.runtime.FileLocator;
+import org.eclipse.core.runtime.IConfigurationElement;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
@@ -48,7 +52,7 @@ public class Activator extends AbstractUIPlugin {
 	private static Activator plugin;
 	
 	protected PropertyResourceBundle localProperties;
-
+	
 	public Activator() {
 		plugin = this;
 	}
@@ -86,7 +90,7 @@ public class Activator extends AbstractUIPlugin {
 		return ImageUtil.getExtensionIcon((AbstractUIPlugin) getDefault(), filename);
 	}
 	
-	 public  PropertyResourceBundle getLocalProperties() {
+	public  PropertyResourceBundle getLocalProperties() {
 		 if (localProperties == null){
 			 try {
 				 localProperties = new PropertyResourceBundle(
@@ -96,4 +100,13 @@ public class Activator extends AbstractUIPlugin {
 		 }
 		 return localProperties;
 	 }
+	 
+	public boolean isPrePerspective(String id) {
+		IConfigurationElement[] elements = Platform.getExtensionRegistry().getConfigurationElementsFor("org.eclipse.ui.perspectives");
+		HashSet<String> prePerspectiveSet = new HashSet<String>();
+		for (IConfigurationElement element : elements) {
+			prePerspectiveSet.add(element.getAttribute("id"));
+		}
+		return prePerspectiveSet.contains(id);
+	}
 }

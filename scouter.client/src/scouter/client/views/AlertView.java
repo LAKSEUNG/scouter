@@ -17,6 +17,8 @@
  */
 package scouter.client.views;
 
+import java.util.Date;
+
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.swt.SWT;
@@ -42,6 +44,7 @@ import scouter.client.util.UIUtil;
 import scouter.lang.AlertLevel;
 import scouter.lang.pack.AlertPack;
 import scouter.util.DateUtil;
+import scouter.util.FormatUtil;
 
 public class AlertView extends ViewPart implements IAlertListener {
 	public static final String ID = AlertView.class.getName();
@@ -69,7 +72,7 @@ public class AlertView extends ViewPart implements IAlertListener {
 				}
 				AlertData d = (AlertData) o;
 				String objName = TextProxy.object.getLoadText(DateUtil.yyyymmdd(d.p.time), d.p.objHash, d.serverId);
-				alertDialog = new AlertNotifierDialog(getViewSite().getShell().getDisplay());
+				alertDialog = new AlertNotifierDialog(getViewSite().getShell().getDisplay(), d.serverId);
 				alertDialog.setObjName(objName);
 				alertDialog.setPack(d.p);
 				alertDialog.show(getViewSite().getShell().getBounds());
@@ -116,13 +119,12 @@ public class AlertView extends ViewPart implements IAlertListener {
 //	    
 //	    man.add(new Separator());
 		
-		man.add(new Action("clear", ImageUtil.getImageDescriptor(Images.page_white_text)) {
+		man.add(new Action("clear", ImageUtil.getImageDescriptor(Images.minus)) {
 			public void run() {
 				reload();
 			}
 		});
 		
-		this.setPartName("Alert");
 		proxyThread.addAlertListener(this);
 	}
 
@@ -173,7 +175,7 @@ public class AlertView extends ViewPart implements IAlertListener {
 				AlertData data = new AlertData(serverId, alert);
 				TableItem t = new TableItem(table, SWT.NONE, 0);
 				t.setText(new String[] { //
-						DateUtil.getLogTime(alert.time),//
+						FormatUtil.print(new Date(alert.time), "HH:mm:ss.SSS"),
 						AlertLevel.getName(alert.level), //
 						alert.title, //
 						alert.message,//

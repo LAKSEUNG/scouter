@@ -24,7 +24,6 @@ import java.net.Socket;
 
 import scouter.client.server.Server;
 import scouter.client.server.ServerManager;
-import scouter.client.util.ConsoleProxy;
 import scouter.io.DataInputX;
 import scouter.io.DataOutputX;
 import scouter.net.NetCafe;
@@ -51,7 +50,7 @@ public class ClientTCP{
 			///
 			socket.connect(new InetSocketAddress(server.getIp(), server.getPort()),3000);
 			socket.setTcpNoDelay(true);
-			socket.setSoTimeout(4000);
+			socket.setSoTimeout(server.getSoTimeOut());
 			in = new DataInputX(new BufferedInputStream(socket.getInputStream()));
 			out = new DataOutputX(new BufferedOutputStream(socket.getOutputStream()));
 			
@@ -60,13 +59,15 @@ public class ClientTCP{
 			out.flush();
 			//*************//
 			if (server.isConnected() == false) {
-				ConsoleProxy.infoSafe("Success to connect " + server.getIp() + ":" + server.getPort());
-				server.setConnected(true);
+				System.out.println("Success to connect " + server.getIp() + ":" + server.getPort());
 			}
+			server.setConnected(true);
 		} catch (Throwable t) {
-			ConsoleProxy.errorSafe(t.toString());
+			System.out.println(t.getMessage());
 			close();
-			server.setConnected(false);
+			if (server.getConnectionPool().size() < 1) {
+				server.setConnected(false);
+			}
 		}
 	}
 	

@@ -20,6 +20,7 @@ package scouter.client.threads;
 import java.util.Set;
 
 import scouter.client.net.LoginMgr;
+import scouter.client.net.LoginResult;
 import scouter.client.server.Server;
 import scouter.client.server.ServerManager;
 import scouter.client.util.ConsoleProxy;
@@ -52,12 +53,12 @@ public class SessionObserver extends Thread {
 					if (server.isConnected() == false && server.getConnectionPool().size() < 1) {
 						server.setSession(0); // reset session
 					}
-					if (server.isConnected() && server.getSession() == 0) {
-						boolean success = LoginMgr.silentLogin(server, server.getUserId(), server.getPassword());
-						if (success) {
+					if (/*server.isConnected() &&*/ server.getSession() == 0) {
+						LoginResult result = LoginMgr.silentLogin(server, server.getUserId(), server.getPassword());
+						if (result.success) {
 							ConsoleProxy.infoSafe("Success re-login to " + server.getName());
 						} else {
-							ConsoleProxy.errorSafe("Failed re-login to " + server.getName());
+							ConsoleProxy.errorSafe("Failed re-login to " + server.getName() + " : " + result.getErrorMessage());
 						}
 					}
 				}

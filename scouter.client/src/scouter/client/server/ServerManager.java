@@ -22,8 +22,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import scouter.client.net.TcpProxy;
-import scouter.client.util.ConsoleProxy;
-import scouter.client.views.ObjectNavigationView;
 import scouter.lang.pack.MapPack;
 import scouter.net.RequestCmd;
 import scouter.util.HashUtil;
@@ -80,16 +78,18 @@ public class ServerManager extends Thread {
 				TcpProxy tcp = TcpProxy.getTcpProxy(server.getId());
 				try {
 					MapPack p = (MapPack) tcp.getSingle(RequestCmd.SERVER_STATUS, null);
-					long time = p.getLong("time");
-					if (time > 0) {
-						server.setDelta(time);
+					if (p != null) {
+						long time = p.getLong("time");
+						if (time > 0) {
+							server.setDelta(time);
+						}
+						long usedMemory = p.getLong("used");
+						long totalMemory = p.getLong("total");
+						server.setUsedMemory(usedMemory);
+						server.setTotalMemory(totalMemory);
 					}
-					long usedMemory = p.getLong("used");
-					long totalMemory = p.getLong("total");
-					server.setUsedMemory(usedMemory);
-					server.setTotalMemory(totalMemory);
 				} catch (Throwable th) {
-					//ConsoleProxy.errorSafe("SERVER_TIME : " + server.getName() + "  " + th.getMessage());
+					th.printStackTrace();
 				} finally {
 					TcpProxy.putTcpProxy(tcp);
 				}
@@ -114,8 +114,7 @@ public class ServerManager extends Thread {
 		Server remove = serverMap.remove(serverId);
 		if (remove != null) {
 			remove.close();
-			ConsoleProxy.infoSafe("Disconneted : " + remove.getName());
-			ObjectNavigationView.removeActionCache(remove.getId());
+			System.out.println("Remove server : " + remove.getName());
 		}
 	}
 	

@@ -17,6 +17,7 @@
 package scouter.client.tags;
 
 import java.util.ArrayList;
+import java.util.Date;
 
 import org.eclipse.jface.layout.TableColumnLayout;
 import org.eclipse.jface.viewers.ArrayContentProvider;
@@ -88,7 +89,7 @@ public class ServiceTableComposite extends Composite {
 					XLogData d = new XLogData(data, serverId);
 					d.objName = TextProxy.object.getLoadText(yyyymmdd, data.objHash, serverId);
 					d.serviceName = TextProxy.service.getLoadText(yyyymmdd, data.service, serverId);
-					new OpenXLogProfileJob(d, serverId).schedule();
+					new OpenXLogProfileJob(ServiceTableComposite.this.getDisplay(), d, serverId).schedule();
 				} else {
 					System.out.println(o);
 				}
@@ -167,9 +168,9 @@ public class ServiceTableComposite extends Composite {
 			case SERVICE :
 				return TextProxy.service.getLoadText(yyyymmdd, p.service, serverId);
 			case START_TIME :
-				return DateUtil.getLogTime(p.endTime - p.elapsed);
+				return FormatUtil.print(new Date(p.endTime - p.elapsed), "HH:mm:ss.SSS");
 			case END_TIME :
-				return DateUtil.getLogTime(p.endTime);
+				return FormatUtil.print(new Date(p.endTime), "HH:mm:ss.SSS");
 			case TX_ID :
 				return Hexa32.toString32(p.txid);
 			case CPU :
@@ -178,8 +179,8 @@ public class ServiceTableComposite extends Composite {
 				return FormatUtil.print(p.sqlCount, "#,##0");
 			case SQL_TIME :
 					return FormatUtil.print(p.sqlTime, "#,##0");
-			case BYTES :
-					return FormatUtil.print(p.bytes, "#,##0");
+			case KBYTES :
+					return FormatUtil.print(p.kbytes, "#,##0");
 			case IP :
 					return IPUtil.toString(p.ipaddr);
 			case ERROR :
@@ -219,7 +220,7 @@ public class ServiceTableComposite extends Composite {
 	    CPU("Cpu", 50, SWT.RIGHT, true, true, true),
 	    SQL_COUNT("SQL Count", 50, SWT.RIGHT, true, true, true),
 	    SQL_TIME("SQL Time", 50, SWT.RIGHT, true, true, true),
-	    BYTES("Bytes", 50, SWT.RIGHT, true, true, true),
+	    KBYTES("KBytes", 50, SWT.RIGHT, true, true, true),
 	    IP("IP", 100, SWT.LEFT, true, true, false),
 	    ERROR("Error", 50, SWT.LEFT, true, true, false),
 	    GX_ID("Gxid", 30, SWT.LEFT, true, true, false);

@@ -35,7 +35,7 @@ public class MenuStr {
 	public static final String ACTIVE_SPEED_REAL                  = "Active Speed";
 	public static final String ACTIVE_SPEED_REAL_ID               = "scouter.client.actions.counter.activespeed";
 	
-	public static final String SERVICE_COUNT = "Service Count";
+	public static final String SERVICE_COUNT = "24H Service Count";
 	public static final String SERVICE_COUNT_ID  = "scouter.client.actions.counter.servicecount";
 	
 	public static final String HOURLY_CHART = "Hourly Chart";
@@ -175,6 +175,9 @@ public class MenuStr {
 	
 	public static final String CONFIGURE                          = "Configure";
 	public static final String CONFIGURE_ID                       = "scouter.client.contextmenu.agentobject.configure";
+
+	public static final String ALERT_SCRIPTING                    = "Customizable Alert";
+	public static final String ALERT_SCRIPTING_ID                 = "scouter.client.alertScripting";
 	
 	public static final String PROPERTIES                         = "Properties";
 	public static final String PROPERTIES_ID                      = "scouter.client.contextmenu.agentobject.properties";
@@ -202,4 +205,6 @@ public class MenuStr {
 	public static final String WHO               = "Who";
 	public static final String MEM_INFO               = "Mem Info";
 	
+	public static final String BATCH_HISTORY 		= "Batch History";
+	public static final String BATCH_ACTIVE_LIST 		= "Batch Active List";
 }

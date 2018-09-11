@@ -17,9 +17,6 @@
  */
 package scouter.client.xlog.views;
 
-import java.util.ArrayList;
-import java.util.Enumeration;
-
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
@@ -29,13 +26,16 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
-
 import scouter.client.model.XLogData;
+import scouter.client.preferences.PManager;
+import scouter.client.preferences.PreferenceConstants;
 import scouter.client.util.ConsoleProxy;
 import scouter.client.util.ExUtil;
-import scouter.client.util.TimeUtil;
 import scouter.util.LongEnumer;
 import scouter.util.LongKeyLinkedMap;
+
+import java.util.ArrayList;
+import java.util.Enumeration;
 
 public class XLogViewMouse implements MouseListener, MouseMoveListener {
 	
@@ -103,15 +103,15 @@ public class XLogViewMouse implements MouseListener, MouseMoveListener {
 		}
 	}
 
-	long last_draw = TimeUtil.getCurrentTime();
+	long last_draw = System.currentTimeMillis();
 	public String yyyymmdd;
 
 	public void mouseMove(MouseEvent e) {
 		if (mode != null && x1 >= 0 && y1 >= 0) {
 			x2 = e.x;
 			y2 = e.y;
-			long now = TimeUtil.getCurrentTime();
-			if (now > last_draw + 100) {
+			long now = System.currentTimeMillis();
+			if (now > last_draw + 50) {
 				last_draw = now;
 				canvas.redraw();
 			}
@@ -146,7 +146,7 @@ public class XLogViewMouse implements MouseListener, MouseMoveListener {
 			if (inRect(x1, y1, x2, y2, item.x, item.y) 
 					&& (item.filter_ok)) {
 				txCnt++;
-				if (selectedData.size() < 200) {
+				if (selectedData.size() < PManager.getInstance().getInt(PreferenceConstants.P_XLOG_DRAG_MAX_COUNT)) {
 					selectedData.add(item);
 				}
 			}
@@ -229,11 +229,11 @@ public class XLogViewMouse implements MouseListener, MouseMoveListener {
 								}
 								break;
 							case HEAP_USED:
-								if (item.p.bytes / 1024.0d > max) {
-									max = item.p.bytes / 1024.0d ;
+								if (item.p.kbytes > max) {
+									max = item.p.kbytes;
 								}
-								if (item.p.bytes / 1024.0d < min) {
-									min = item.p.bytes / 1024.0d ;
+								if (item.p.kbytes < min) {
+									min = item.p.kbytes;
 								}
 								break;
 							default:
