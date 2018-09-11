@@ -17,6 +17,21 @@
  */
 package scouter.client;
 
+import org.eclipse.core.runtime.FileLocator;
+import org.eclipse.core.runtime.Path;
+import org.eclipse.core.runtime.Platform;
+import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.swt.graphics.Image;
+import org.eclipse.ui.ISharedImages;
+import org.eclipse.ui.PlatformUI;
+import org.osgi.framework.Bundle;
+import scouter.client.server.Server;
+import scouter.client.server.ServerManager;
+import scouter.client.util.ImageUtil;
+import scouter.lang.ObjectType;
+import scouter.lang.counters.CounterEngine;
+import scouter.util.StringUtil;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -26,22 +41,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 
-import org.eclipse.core.runtime.FileLocator;
-import org.eclipse.core.runtime.Path;
-import org.eclipse.core.runtime.Platform;
-import org.eclipse.jface.resource.ImageDescriptor;
-import org.eclipse.swt.graphics.Image;
-import org.eclipse.ui.ISharedImages;
-import org.eclipse.ui.PlatformUI;
-import org.osgi.framework.Bundle;
-
-import scouter.client.server.Server;
-import scouter.client.server.ServerManager;
-import scouter.client.util.ImageUtil;
-import scouter.util.StringUtil;
-import scouter.lang.ObjectType;
-import scouter.lang.counters.CounterEngine;
-
 
 public class Images {
 
@@ -50,7 +49,7 @@ public class Images {
     public static final Image folder = Activator.getImage("icons/folder.png");
     public static final Image folder_star = Activator.getImage("icons/folder_star.png");
 
-    public static final Image refresh = Activator.getImage("icons/refresh.gif");
+    public static final Image refresh = Activator.getImage("icons/refresh.png");
     public static final Image refresh_auto = Activator.getImage("icons/refresh_auto.png");
 
     public static final Image expand = Activator.getImage("icons/expand.png");
@@ -64,6 +63,7 @@ public class Images {
     public static final Image add = Activator.getImage("icons/add.gif");
 
     public static final Image filter = Activator.getImage("icons/filter.png");
+	public static final Image search = Activator.getImage("icons/search.png");
 
 	public static final Image monitor  = Activator.getImage("icons/monitor.png");
 	
@@ -101,6 +101,8 @@ public class Images {
 	public static final Image scouter_48 = Activator.getImage("icons/h48.png");
 	
 	public static final Image CONFIG_USER  = Activator.getImage("icons/user.png");
+
+	public static final Image help  = Activator.getImage("icons/help.png");
 	
 	// icons for actions
 	public static final Image thread         = Activator.getImage("icons/thread.png");
@@ -331,41 +333,43 @@ public class Images {
 	
 	public static final ImageDescriptor REMOVE_WARNING         = Activator.getImageDescriptor("icons/remove_warn.png");
 	
-	public static final Image error                          = Activator.getImage("icons/error.png");
-	public static final Image circle                          = Activator.getImage("icons/circle.png");
-	public static final Image arrow_right                          = Activator.getImage("icons/arrow_right.png");
-	public static final Image arrow_left                          = Activator.getImage("icons/arrow_left.png");
-	public static final Image box			                          = Activator.getImage("icons/box.png");
-	public static final Image align_left			                          = Activator.getImage("icons/align_left.png");
-	public static final Image color_swatch		                          = Activator.getImage("icons/color_swatch.png");
-	public static final Image color_wheel			                          = Activator.getImage("icons/color_wheel.png");
-	public static final Image arrow_rotate			                          = Activator.getImage("icons/arrow_rotate_anticlockwise.png");
-	public static final ImageDescriptor MORE                = Activator.getImageDescriptor("icons/moredot.png");
+	public static final Image error                            = Activator.getImage("icons/error.png");
+	public static final Image circle                           = Activator.getImage("icons/circle.png");
+	public static final Image arrow_right                      = Activator.getImage("icons/arrow_right.png");
+	public static final Image arrow_left                       = Activator.getImage("icons/arrow_left.png");
+	public static final Image box			                   = Activator.getImage("icons/box.png");
+	public static final Image align_left			           = Activator.getImage("icons/align_left.png");
+	public static final Image color_swatch		               = Activator.getImage("icons/color_swatch.png");
+	public static final Image color_wheel			           = Activator.getImage("icons/color_wheel.png");
+	public static final Image arrow_rotate			           = Activator.getImage("icons/arrow_rotate_anticlockwise.png");
+	public static final Image timer			                   = Activator.getImage("icons/timer.gif");
+	public static final ImageDescriptor MORE                   = Activator.getImageDescriptor("icons/moredot.png");
 	
-	public static final Image group                          = Activator.getImage("icons/group.png");
-	public static final Image group_add                          = Activator.getImage("icons/group_add.png");
-	public static final Image group_delete                          = Activator.getImage("icons/group_delete.png");
-	public static final Image group_go                          = Activator.getImage("icons/group_go.png");
-	public static final Image group_edit                          = Activator.getImage("icons/group_edit.png");
+	public static final Image group                            = Activator.getImage("icons/group.png");
+	public static final Image group_add                        = Activator.getImage("icons/group_add.png");
+	public static final Image group_delete                     = Activator.getImage("icons/group_delete.png");
+	public static final Image group_go                         = Activator.getImage("icons/group_go.png");
+	public static final Image group_edit                       = Activator.getImage("icons/group_edit.png");
 	
-	public static final Image user_add                          = Activator.getImage("icons/user_add.png");
-	public static final Image user_edit                          = Activator.getImage("icons/user_edit.png");
+	public static final Image user_add                         = Activator.getImage("icons/user_add.png");
+	public static final Image user_edit                        = Activator.getImage("icons/user_edit.png");
 	
-	public static final Image database_go                          = Activator.getImage("icons/database_go.png");
-	public static final Image link                          = Activator.getImage("icons/link.png");
-	public static final Image flat_layout                          = Activator.getImage("icons/flat_layout.gif");
-	public static final Image tree_mode                          = Activator.getImage("icons/tree_mode.gif");
-	public static final Image exclamation                          = Activator.getImage("icons/exclamation.png");
-	public static final Image find                          = Activator.getImage("icons/find.png");
-	public static final Image server_chart                          = Activator.getImage("icons/server_chart.png");
-	public static final Image server                          = Activator.getImage("icons/server.png");
-	public static final Image database                          = Activator.getImage("icons/database.png");
-	public static final Image grid                          = Activator.getImage("icons/grid.png");
-	public static final Image log                          = Activator.getImage("icons/log.png");
-	public static final Image sum                          = Activator.getImage("icons/sum.png");
-	public static final Image pin                          = Activator.getImage("icons/pin.gif");
-	public static final Image lock                          = Activator.getImage("icons/lock.png");
-	public static final Image star                          = Activator.getImage("icons/star.png");
-	public static final Image page_white_stack              = Activator.getImage("icons/page_white_stack.png");
+	public static final Image database_go                      = Activator.getImage("icons/database_go.png");
+	public static final Image link                             = Activator.getImage("icons/link.png");
+	public static final Image flat_layout                      = Activator.getImage("icons/flat_layout.gif");
+	public static final Image tree_mode                        = Activator.getImage("icons/tree_mode.gif");
+	public static final Image exclamation                      = Activator.getImage("icons/exclamation.png");
+	public static final Image find                             = Activator.getImage("icons/find.png");
+	public static final Image server_chart                     = Activator.getImage("icons/server_chart.png");
+	public static final Image server                           = Activator.getImage("icons/server.png");
+	public static final Image database                         = Activator.getImage("icons/database.png");
+	public static final Image grid                             = Activator.getImage("icons/grid.png");
+	public static final Image log                              = Activator.getImage("icons/log.png");
+	public static final Image sum                              = Activator.getImage("icons/sum.png");
+	public static final Image pin                              = Activator.getImage("icons/pin.gif");
+	public static final Image lock                             = Activator.getImage("icons/lock.png");
+	public static final Image star                             = Activator.getImage("icons/star.png");
+	public static final Image page_white_stack                 = Activator.getImage("icons/page_white_stack.png");
+	public static final Image page_white_text                  = Activator.getImage("icons/page_white_text.png");
 }
 

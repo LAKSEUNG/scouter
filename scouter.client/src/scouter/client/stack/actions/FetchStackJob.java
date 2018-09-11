@@ -1,3 +1,19 @@
+/*
+ *  Copyright 2016 the original author or authors. 
+ *  @https://github.com/scouter-project/scouter
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License"); 
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License. 
+ */
 package scouter.client.stack.actions;
 
 import java.io.BufferedWriter;
@@ -16,6 +32,7 @@ import scouter.client.net.TcpProxy;
 import scouter.client.stack.base.MainProcessor;
 import scouter.client.util.ExUtil;
 import scouter.client.util.RCPUtil;
+import scouter.client.util.StackUtil;
 import scouter.io.DataInputX;
 import scouter.lang.pack.MapPack;
 import scouter.lang.pack.StackPack;
@@ -39,12 +56,7 @@ public class FetchStackJob extends Job {
 	}
 
 	protected IStatus run(final IProgressMonitor monitor) {
-		File workDir = RCPUtil.getWorkingDirectory();
-		String dirPath = workDir.getAbsolutePath() + objName + "/stack/";
-		File dir = new File(dirPath);
-		if (dir.exists() == false) {
-			dir.mkdirs();
-		}
+		String dirPath = StackUtil.getStackWorkspaceDir(this.objName);
 		StringBuilder sb = new StringBuilder();
 		sb.append(DateUtil.format(from, "yyyyMMdd"));
 		sb.append("_");

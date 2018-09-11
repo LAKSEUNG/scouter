@@ -17,20 +17,20 @@
  */
 package scouter.client.net;
 
+import scouter.client.server.Server;
+import scouter.client.server.ServerManager;
+import scouter.io.DataInputX;
+import scouter.io.DataOutputX;
+import scouter.lang.pack.MapPack;
+import scouter.lang.pack.Pack;
+import scouter.lang.value.Value;
+import scouter.net.RequestCmd;
+import scouter.net.TcpFlag;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
-
-import scouter.client.server.Server;
-import scouter.client.server.ServerManager;
-import scouter.lang.pack.MapPack;
-import scouter.lang.pack.Pack;
-import scouter.lang.value.Value;
-import scouter.io.DataInputX;
-import scouter.io.DataOutputX;
-import scouter.net.RequestCmd;
-import scouter.net.TcpFlag;
 
 public class TcpProxy {
 	private final ClientTCP tcp = new ClientTCP();
@@ -44,7 +44,7 @@ public class TcpProxy {
 	
 	public static synchronized TcpProxy getTcpProxy(int serverId) {
 		Server server = ServerManager.getInstance().getServer(serverId);
-		if (server == null || server.isOpen() == false) {
+		if (server == null || server.isOpen() == false || server.isConnected() == false) {
 			return new DummyTcpProxy();
 		}
 		ConnectionPool pool = server.getConnectionPool();
@@ -57,9 +57,11 @@ public class TcpProxy {
 	public static synchronized void putTcpProxy(TcpProxy t) {
 		if (t == null)
 			return;
-		if (t.isValid()) {
+		if (t.isValid() && t.getServer().isConnected()) {
 			ConnectionPool pool = t.getServer().getConnectionPool();
 			pool.put(t);
+		} else {
+			t.close();
 		}
 	}
 	
@@ -152,8 +154,13 @@ public class TcpProxy {
 					out.writePack((Pack) param);
 				}
 				out.flush();
-				while (in.readByte() == TcpFlag.HasNEXT) {
+				byte resFlag;
+				while ((resFlag = in.readByte()) == TcpFlag.HasNEXT) {
 					recv.process(in);
+				}
+				if (resFlag == TcpFlag.INVALID_SESSION) {
+					server.setSession(0); // SessionObserver will relogin
+					tcp.close();
 				}
 			} catch (Throwable e) {
 				tcp.close();

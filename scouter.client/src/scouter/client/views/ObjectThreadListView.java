@@ -40,7 +40,6 @@ import org.eclipse.ui.IViewReference;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
-import org.eclipse.ui.internal.WorkbenchPage;
 import org.eclipse.ui.part.ViewPart;
 
 import scouter.client.Images;
@@ -107,7 +106,7 @@ public class ObjectThreadListView extends ViewPart implements Refreshable, ViewW
 				try {
 					IWorkbenchWindow win = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
 					ObjectThreadDetailView view = (ObjectThreadDetailView) win.getActivePage().showView(ObjectThreadDetailView.ID, serverId + "&" +  objHash, IWorkbenchPage.VIEW_ACTIVATE);
-					view.setInput(threadId);
+					view.setInput(threadId, 0L);
 				} catch (Exception d) {
 				}
 			}

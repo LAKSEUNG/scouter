@@ -89,7 +89,7 @@ public class StackAnalyzerView extends ViewPart {
 		TreeColumn treeColumn = new TreeColumn(m_mainTree, SWT.LEFT);
 		treeColumn.setAlignment(SWT.LEFT);
 		treeColumn.setText("Division");
-		treeColumn.setWidth(450);
+		treeColumn.setWidth(300);
 		treeColumn = new TreeColumn(m_mainTree, SWT.RIGHT);
 		treeColumn.setAlignment(SWT.RIGHT);
 		treeColumn.setText("Count");
@@ -284,6 +284,11 @@ public class StackAnalyzerView extends ViewPart {
 		menuItem.setSelection(mainProcessor.isDefaultConfiguration());
 		menuItem.addListener(SWT.Selection, listener);
 
+		menuItem = new MenuItem(popupMenu, SWT.CHECK);
+		menuItem.setText("Analyze All Threads In Stack(No Filter)");
+		menuItem.setSelection(mainProcessor.isAnalyzeAllThreads());
+		menuItem.addListener(SWT.Selection, listener);
+		
 		m_mainTree.setMenu(popupMenu);
 	}
 	

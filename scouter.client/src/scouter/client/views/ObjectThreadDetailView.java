@@ -17,62 +17,35 @@
  */
 package scouter.client.views;
 
-import java.util.ArrayList;
-
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.StyledText;
-import org.eclipse.swt.events.KeyAdapter;
-import org.eclipse.swt.events.KeyEvent;
-import org.eclipse.swt.events.MouseAdapter;
-import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.*;
 import org.eclipse.swt.graphics.Font;
-import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
-import org.eclipse.swt.widgets.Button;
-import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Display;
-import org.eclipse.swt.widgets.Monitor;
-import org.eclipse.swt.widgets.Table;
-import org.eclipse.swt.widgets.TableColumn;
-import org.eclipse.swt.widgets.TableItem;
-import org.eclipse.ui.IViewReference;
+import org.eclipse.swt.widgets.*;
 import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.PartInitException;
-import org.eclipse.ui.internal.WorkbenchPage;
 import org.eclipse.ui.part.ViewPart;
-
 import scouter.client.Images;
 import scouter.client.model.AgentDataProxy;
-import scouter.client.model.DetachedManager;
 import scouter.client.net.TcpProxy;
 import scouter.client.popup.EditableMessageDialog;
 import scouter.client.server.GroupPolicyConstants;
 import scouter.client.server.ServerManager;
-import scouter.client.util.ColorUtil;
-import scouter.client.util.ColoringWord;
-import scouter.client.util.CustomLineStyleListener;
-import scouter.client.util.ExUtil;
-import scouter.client.util.ImageUtil;
-import scouter.client.util.ScouterUtil;
-import scouter.client.util.SortUtil;
-import scouter.client.util.UIUtil;
+import scouter.client.util.*;
 import scouter.client.util.UIUtil.ViewWithTable;
 import scouter.lang.pack.MapPack;
-import scouter.lang.value.DecimalValue;
-import scouter.lang.value.DoubleValue;
-import scouter.lang.value.FloatValue;
-import scouter.lang.value.TextValue;
-import scouter.lang.value.Value;
+import scouter.lang.value.*;
 import scouter.net.RequestCmd;
 import scouter.util.CastUtil;
 import scouter.util.FormatUtil;
+
+import java.util.ArrayList;
 
 
 public class ObjectThreadDetailView extends ViewPart implements ViewWithTable{
@@ -80,13 +53,13 @@ public class ObjectThreadDetailView extends ViewPart implements ViewWithTable{
 
 	private int objHash;
 	private long threadid;
+	private long txid;
 	private int serverId;
 	
 	private ArrayList<ColoringWord> defaultHighlightings;
 	CustomLineStyleListener listener;
 	
-	Button interruptBtn;
-	Button stopBtn;
+	Button interruptBtn, stopBtn, resumeBtn, suspendBtn;
 	
 	public void init(IViewSite site) throws PartInitException {
 		super.init(site);
@@ -120,13 +93,37 @@ public class ObjectThreadDetailView extends ViewPart implements ViewWithTable{
 		upperComp.setLayout(UIUtil.formLayout(3, 3));
 		
 		if (ServerManager.getInstance().getServer(serverId).isAllowAction(GroupPolicyConstants.ALLOW_KILLTRANSACTION)) {
+			resumeBtn = new Button(upperComp, SWT.PUSH);
+			resumeBtn.setText("&Resume");
+			resumeBtn.setImage(Images.WARN);
+			resumeBtn.setLayoutData(UIUtil.formData(null, -1, null, -1, 100, -5, null, -1, 100));
+			resumeBtn.addSelectionListener(new SelectionAdapter() {
+				public void widgetSelected(SelectionEvent e) {
+					if (MessageDialog.openConfirm(parent.getShell(), "Resume Thread", "This thread will be resumed.(This may result in throwing a SecurityException) Continue?")) {
+						controlThread("resume");
+					}
+				}
+			});
+			
+			suspendBtn = new Button(upperComp, SWT.PUSH);
+			suspendBtn.setText("&Suspend");
+			suspendBtn.setImage(Images.WARN);
+			suspendBtn.setLayoutData(UIUtil.formData(null, -1, null, -1, resumeBtn, -5, null, -1, 100));
+			suspendBtn.addSelectionListener(new SelectionAdapter() {
+				public void widgetSelected(SelectionEvent e) {
+					if (MessageDialog.openConfirm(parent.getShell(), "Suspend Thread", "This thread will be suspended.(This may result in throwing a SecurityException) Continue?")) {
+						controlThread("suspend");
+					}
+				}
+			});
+			
 			stopBtn = new Button(upperComp, SWT.PUSH);
 			stopBtn.setText("&Stop");
 			stopBtn.setImage(Images.WARN);
-			stopBtn.setLayoutData(UIUtil.formData(null, -1, null, -1, 100, -5, null, -1, 100));
+			stopBtn.setLayoutData(UIUtil.formData(null, -1, null, -1, suspendBtn, -5, null, -1, 100));
 			stopBtn.addSelectionListener(new SelectionAdapter() {
 				public void widgetSelected(SelectionEvent e) {
-					if (MessageDialog.openConfirm(parent.getShell(), "Stop Thread", "This thread will be terminated. Continue?")) {
+					if (MessageDialog.openConfirm(parent.getShell(), "Stop Thread", "This thread will be terminated.(This feature requires a pre-test) Continue?")) {
 						controlThread("stop");
 					}
 				}
@@ -181,9 +178,14 @@ public class ObjectThreadDetailView extends ViewPart implements ViewWithTable{
 		});
 	}
 	
-	public void setInput(long threadId) {
+	public void setInput(long threadId, long txid) {
 		this.threadid = threadId;
-		this.setPartName("Thread Detail[" + threadid + "]");
+		this.txid = txid;
+		if(threadId != 0L) {
+			this.setPartName("Thread Detail[" + threadid + "]");
+		} else {
+			this.setPartName("Deferred Tx Detail[" + txid + "]");
+		}
 		table.removeAll();
 		stacktrace.setText("");
 		reload();
@@ -208,7 +210,7 @@ public class ObjectThreadDetailView extends ViewPart implements ViewWithTable{
 	protected void reload() {
 		ExUtil.asyncRun(new Runnable() {
 			public void run() {
-				final MapPack mp = AgentDataProxy.getThreadDetail(objHash, threadid, serverId);
+				final MapPack mp = AgentDataProxy.getThreadDetail(objHash, threadid, txid, serverId);
 				setThreadDetailContens(mp);
 			}
 		});
@@ -257,6 +259,8 @@ public class ObjectThreadDetailView extends ViewPart implements ViewWithTable{
 				if (stopBtn != null && interruptBtn != null) {
 					stopBtn.setEnabled(serviceThread);
 					interruptBtn.setEnabled(serviceThread);
+					resumeBtn.setEnabled(serviceThread);
+					suspendBtn.setEnabled(serviceThread);
 				}
 				sortTable();
 			}

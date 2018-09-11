@@ -29,6 +29,7 @@ import org.eclipse.swt.widgets.Display;
 
 import scouter.client.model.TextProxy;
 import scouter.client.model.XLogData;
+import scouter.client.threads.ObjectSelectManager;
 import scouter.client.util.ExUtil;
 import scouter.util.DateUtil;
 import scouter.util.LongEnumer;
@@ -51,7 +52,7 @@ public class XLogSummaryRefererDialog extends XLogSummaryAbstractDialog{
 				while (longEnumer.hasMoreElements()) {
 					XLogData d = dataMap.get(longEnumer.nextLong());
 					long time = d.p.endTime;
-					if (d.filter_ok && time >= stime && time <= etime) {
+					if (d.filter_ok && time >= stime && time <= etime && !ObjectSelectManager.getInstance().isUnselectedObject(d.p.objHash)) {
 						RefererSummary summary = summaryMap.get(d.p.referer);
 						if (summary == null) {
 							summary = new RefererSummary(d.p.referer);
@@ -72,9 +73,9 @@ public class XLogSummaryRefererDialog extends XLogSummaryAbstractDialog{
 							summary.error++;
 						}
 						summary.cpu += d.p.cpu;
-						summary.memory = d.p.bytes;
-						summary.sqltime = d.p.sqlTime;
-						summary.apicalltime = d.p.apicallTime;
+						summary.memory += d.p.kbytes;
+						summary.sqltime += d.p.sqlTime;
+						summary.apicalltime += d.p.apicallTime;
 					}
 				}
 				for (Integer serverId : loadTextMap.keySet()) {

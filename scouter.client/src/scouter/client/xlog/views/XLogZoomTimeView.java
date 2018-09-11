@@ -17,8 +17,6 @@
  */
 package scouter.client.xlog.views;
 
-import org.eclipse.jface.action.Action;
-import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IStatusLineManager;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.swt.events.ControlEvent;
@@ -26,11 +24,8 @@ import org.eclipse.swt.events.ControlListener;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
-
-import scouter.client.Images;
 import scouter.client.model.XLogData;
 import scouter.client.util.ExUtil;
-import scouter.client.util.ImageUtil;
 import scouter.client.xlog.XLogYAxisEnum;
 import scouter.util.DateUtil;
 import scouter.util.LongEnumer;
@@ -57,7 +52,15 @@ public class XLogZoomTimeView extends XLogViewCommon {
 			}
 		});
 	}
-	
+
+	@Override
+	protected void openInExternalLink() {
+	}
+
+	@Override
+	protected void clipboardOfExternalLink() {
+	}
+
 	public void refresh(){
 		viewPainter.build();
 		ExUtil.exec(canvas, new Runnable() {

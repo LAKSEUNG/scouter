@@ -16,18 +16,6 @@
  */
 package scouter.client.tags;
 
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-
 import org.csstudio.swt.xygraph.dataprovider.CircularBufferDataProvider;
 import org.csstudio.swt.xygraph.dataprovider.Sample;
 import org.csstudio.swt.xygraph.figures.Trace;
@@ -57,11 +45,7 @@ import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
-import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.graphics.ImageData;
-import org.eclipse.swt.graphics.PaletteData;
-import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
@@ -76,16 +60,13 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
-import org.eclipse.ui.IViewSite;
-import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
-
 import scouter.client.Images;
 import scouter.client.model.CounterColorManager;
 import scouter.client.net.INetReader;
 import scouter.client.net.TcpProxy;
 import scouter.client.popup.CalendarDialog;
-import scouter.client.popup.CalendarDialog.ILoadCounterDialog;
+import scouter.client.popup.CalendarDialog.ILoadCalendarDialog;
 import scouter.client.util.ChartUtil;
 import scouter.client.util.ColorUtil;
 import scouter.client.util.ExUtil;
@@ -102,12 +83,23 @@ import scouter.lang.value.MapValue;
 import scouter.lang.value.NullValue;
 import scouter.lang.value.Value;
 import scouter.net.RequestCmd;
-import scouter.util.CastUtil;
 import scouter.util.DateUtil;
 import scouter.util.FormatUtil;
 import scouter.util.LinkedMap;
-import scouter.util.LinkedMap.ENTRY;
+import scouter.util.LinkedMap.LinkedEntry;
 import scouter.util.StringUtil;
+
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class TagCountView extends ViewPart {
 	
@@ -158,14 +150,6 @@ public class TagCountView extends ViewPart {
 	double rangeX2;
 	boolean zoomMode = false;
 	
-
-	@Override
-	public void init(IViewSite site) throws PartInitException {
-		super.init(site);
-		String secId = site.getSecondaryId();
-		serverId = CastUtil.cint(secId);
-	}
-
 	@Override
 	public void createPartControl(Composite parent) {
 		this.parent = parent; 
@@ -199,7 +183,7 @@ public class TagCountView extends ViewPart {
 		dateLbl.setLayoutData(new RowData(160, SWT.DEFAULT));
 		dateLbl.addMouseListener(new MouseAdapter() {
 			public void mouseDown(MouseEvent e) {
-				CalendarDialog dialog = new CalendarDialog(getViewSite().getShell().getDisplay(), new ILoadCounterDialog(){
+				CalendarDialog dialog = new CalendarDialog(getViewSite().getShell().getDisplay(), new ILoadCalendarDialog(){
 					public void onPressedOk(long startTime, long endTime) {}
 					public void onPressedCancel() {}
 					public void onPressedOk(String date) {
@@ -365,34 +349,11 @@ public class TagCountView extends ViewPart {
 		
 		cntCanvas.addMouseListener(new MouseListener() {
 			
-			String selectedName;
 			
 			public void mouseUp(MouseEvent e) {
-				if (selectedName == null) {
-					return;
-				}
-				Trace trace = cntTraceMap.get(selectedName);
-				trace.setTraceColor(CounterColorManager.getInstance().assignColor(selectedName));
-				selectedName = null;
 			}
 			
 			public void mouseDown(MouseEvent e) {
-				Image image = new Image(e.display, 1, 1);
-				GC gc = new GC((FigureCanvas)e.widget);
-				gc.copyArea(image, e.x, e.y);
-				ImageData imageData = image.getImageData();
-				PaletteData palette = imageData.palette;
-				int pixelValue = imageData.getPixel(0, 0);
-				RGB rgb = palette.getRGB(pixelValue);
-				selectedName = CounterColorManager.getInstance().getName(rgb);
-				if (selectedName != null) {
-					Trace trace = cntTraceMap.get(selectedName);
-					if (trace != null) {
-						trace.setTraceColor(ColorUtil.getInstance().getColor("dark magenta"));
-					}
-				}
-				gc.dispose();
-				image.dispose();
 			}
 			
 			public void mouseDoubleClick(MouseEvent e) {
@@ -596,7 +557,12 @@ public class TagCountView extends ViewPart {
 
 	@Override
 	public void setFocus() {
-		//ScouterUtil.detachView(this);
+	}
+
+	public void setInput(String date, String objType, int serverId) {
+		setPartName("TagCount" + "-" + objType);
+		this.serverId = serverId;
+		setInput(date, objType);
 	}
 
 	public void setInput(String date, String objType) {
@@ -693,9 +659,9 @@ public class TagCountView extends ViewPart {
 		cntTraceMap.clear();
 		float[] stackedValue = new float[1440];
 		LinkedMap<String, float[]> tempMap = new LinkedMap<String, float[]>();
-		Enumeration<ENTRY> entries = valueMap.entries();
+		Enumeration<LinkedEntry<String, float[]>> entries = valueMap.entries();
 		while (entries.hasMoreElements()) {
-			ENTRY entry = entries.nextElement();
+			LinkedEntry<String, float[]> entry = entries.nextElement();
 			String key = (String) entry.getKey();
 			float[] values = (float[]) entry.getValue();
 			for (int i = 0; i < values.length; i++) {
@@ -706,9 +672,9 @@ public class TagCountView extends ViewPart {
 			tempMap.putFirst(key, copiedArray);
 		}
 		long stime = DateUtil.yyyymmdd(date);
-		Enumeration<ENTRY> entries2 = tempMap.entries();
+		Enumeration<LinkedEntry<String, float[]>> entries2 = tempMap.entries();
 		while (entries2.hasMoreElements()) {
-			ENTRY entry = entries2.nextElement();
+			LinkedEntry<String, float[]> entry = entries2.nextElement();
 			String key = (String) entry.getKey();
 			float[] values = (float[]) entry.getValue();
 			Trace trace = getCountTrace(key);

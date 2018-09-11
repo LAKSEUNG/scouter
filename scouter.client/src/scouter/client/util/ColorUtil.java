@@ -17,12 +17,11 @@
  */
 package scouter.client.util;
 
-import java.util.HashMap;
-
-import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Display;
+
+import java.util.HashMap;
 
 public class ColorUtil {
 	
@@ -66,16 +65,26 @@ public class ColorUtil {
 		rgb.put("ivory",  new Color(null, 255, 255, 240));
 
 		rgb.put("white", new Color(null, 255, 255, 255));
-		rgb.put("blue",  new Color(null, 0, 0, 255 ));
-		rgb.put("red",  new Color(null, 255, 0, 0 ));
+		rgb.put("blue",  new Color(null, 0, 0, 255));
+		rgb.put("red",  new Color(null, 255, 0, 0));
+		rgb.put("light red",  new Color(null, 255, 135, 135));
+		rgb.put("light2 red",  new Color(null, 255, 180, 180));
+		rgb.put("light red2",  new Color(null, 255, 100, 100));
 		rgb.put("green",  new Color(null, 0, 255, 0));
 		rgb.put("gray", new Color(null, 100, 100, 100));
+		rgb.put("light gray", new Color(null, 160, 160, 160));
+		rgb.put("light2 gray", new Color(null, 190, 190, 190));
 		rgb.put("blue gray",  new Color(null, 102, 153, 204));
 
 		rgb.put("dark green", new Color(null, 00, 0x64, 00));
 		rgb.put("dark magenta", new Color(null, 0x8B, 00, 0x8B));
 		rgb.put("dark blue", new Color(null, 0, 0, 0x8B));
 		rgb.put("dark red",  new Color(null, 139, 0, 0));
+		rgb.put("dark gray", new Color(null, 70, 70, 70));
+
+		rgb.put("gray2", new Color(null, 150, 150, 180));
+		rgb.put("gray3",  new Color(null, 120, 120, 180));
+		rgb.put("dark orange",  new Color(null, 238, 140, 20));
 	}
 
 	public Color getColor(String name) {
@@ -96,7 +105,7 @@ public class ColorUtil {
 	public Color act2_light = new Color(null, 255, 255, 169);
 	public Color act3_light = new Color(null, 255, 214, 255);
 	
-	public Color TOTAL_CHART_COLOR = Display.getCurrent().getSystemColor(SWT.COLOR_DARK_BLUE);
+	public Color TOTAL_CHART_COLOR = new Color(null, 0, 0, 139);
 
 	public Color getColor(int id) {
 		Display display = Display.getCurrent();

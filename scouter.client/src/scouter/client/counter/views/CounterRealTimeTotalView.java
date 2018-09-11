@@ -62,13 +62,12 @@ import scouter.client.util.ImageUtil;
 import scouter.client.util.MenuUtil;
 import scouter.client.util.ScouterUtil;
 import scouter.client.util.TimeUtil;
-import scouter.client.util.UIUtil;
 import scouter.client.views.ScouterViewPart;
+import scouter.io.DataInputX;
 import scouter.lang.TimeTypeEnum;
 import scouter.lang.pack.MapPack;
 import scouter.lang.pack.Pack;
 import scouter.lang.value.DoubleValue;
-import scouter.io.DataInputX;
 import scouter.net.RequestCmd;
 import scouter.util.CastUtil;
 import scouter.util.DateUtil;
@@ -194,13 +193,13 @@ public class CounterRealTimeTotalView extends ScouterViewPart implements Refresh
 			counterDisplay = server.getCounterEngine().getCounterDisplayName(objType, counter);
 			counterUnit = server.getCounterEngine().getCounterUnit(objType, counter);
 		}
-		desc = "ⓢ"+svrName+" | (Realtime) Total " + counterDisplay + (!"".equals(counterUnit)?" ("+counterUnit+")":"");
+		desc = "ⓢ"+svrName+" | (Current Total) " + counterDisplay + (!"".equals(counterUnit)?" ("+counterUnit+")":"");
 		try {
 			setViewTab(objType, counter, serverId);
 		} catch (Exception e1) {
 			e1.printStackTrace();
 		}
-		MenuUtil.createCounterContextMenu(ID, canvas, serverId, objType, counter);
+		MenuUtil.createCounterContextMenu(ID, canvas, serverId, objType, counter, 0, 0);
 		thread = new RefreshThread(this, 2000);
 		thread.setName(this.toString() + " - "	+ "objType:"+objType + ", counter:"+counter + ", serverId:"+serverId);
 		thread.start();

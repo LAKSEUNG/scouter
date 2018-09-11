@@ -26,6 +26,7 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Display;
 
 import scouter.client.model.XLogData;
+import scouter.client.threads.ObjectSelectManager;
 import scouter.client.util.ExUtil;
 import scouter.util.CastUtil;
 import scouter.util.DateUtil;
@@ -48,7 +49,7 @@ public class XLogSummaryUserDialog extends XLogSummaryAbstractDialog{
 				while (longEnumer.hasMoreElements()) {
 					XLogData d = dataMap.get(longEnumer.nextLong());
 					long time = d.p.endTime;
-					if (d.filter_ok && time >= stime && time <= etime) {
+					if (d.filter_ok && time >= stime && time <= etime && !ObjectSelectManager.getInstance().isUnselectedObject(d.p.objHash)) {
 						UserSummary summary = summaryMap.get(d.p.userid);
 						if (summary == null) {
 							summary = new UserSummary();
@@ -64,9 +65,9 @@ public class XLogSummaryUserDialog extends XLogSummaryAbstractDialog{
 							summary.error++;
 						}
 						summary.cpu += d.p.cpu;
-						summary.memory = d.p.bytes;
-						summary.sqltime = d.p.sqlTime;
-						summary.apicalltime = d.p.apicallTime;
+						summary.memory += d.p.kbytes;
+						summary.sqltime += d.p.sqlTime;
+						summary.apicalltime += d.p.apicallTime;
 					}
 				}
 				final TopN<UserSummary> stn = new TopN<UserSummary>(10000, DIRECTION.DESC);

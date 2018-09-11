@@ -20,6 +20,7 @@ package scouter.client.util;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -27,6 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.DoubleFunction;
+import java.util.function.Function;
+import java.util.function.ToDoubleFunction;
 
 import org.csstudio.swt.xygraph.dataprovider.IDataProvider;
 import org.csstudio.swt.xygraph.dataprovider.ISample;
@@ -41,23 +45,14 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.graphics.Font;
-import org.eclipse.swt.graphics.GC;
-import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.graphics.ImageData;
-import org.eclipse.swt.graphics.PaletteData;
 import org.eclipse.swt.graphics.Point;
-import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Display;
-import org.eclipse.ui.IViewReference;
-import org.eclipse.ui.internal.WorkbenchPage;
-import org.eclipse.ui.part.ViewPart;
 
 import scouter.client.Images;
 import scouter.client.constants.MenuStr;
 import scouter.client.group.GroupManager;
 import scouter.client.model.AgentModelThread;
 import scouter.client.model.AgentObject;
-import scouter.client.model.DetachedManager;
 import scouter.client.net.INetReader;
 import scouter.client.net.TcpProxy;
 import scouter.io.DataInputX;
@@ -269,34 +264,34 @@ public class ScouterUtil {
 			}
 
 			public void mouseDown(MouseEvent e) {
-				Image image = new Image(e.display, 1, 10);
-				GC gc = new GC((FigureCanvas) e.widget);
-				gc.copyArea(image, e.x, e.y > 5 ? e.y - 5 : 0);
-				ImageData imageData = image.getImageData();
-				PaletteData palette = imageData.palette;
-				int point = 5;
-				int offset = 0;
-				while (point >= 0 && point < 10) {
-					int pixelValue = imageData.getPixel(0, point);
-					RGB rgb = palette.getRGB(pixelValue);
-					if (ColorUtil.getInstance().TOTAL_CHART_COLOR.getRGB().equals(rgb)) {
-						double time = xyGraph.primaryXAxis.getPositionValue(e.x, false);
-						Trace t = xyGraph.getPlotArea().getTraceList().get(0);
-						if (t == null) {
-							return;
-						}
-						double d = getNearestValue(t.getDataProvider(), time);
-						String value = FormatUtil.print(d, "#,###.##");
-						toolTip.setText("value : " + value);
-						toolTip.show(new Point(e.x, e.y));
-						break;
-					}
-					offset = offset >= 0 ? offset + 1 : offset - 1;
-					offset *= -1;
-					point += offset;
+				double x = xyGraph.primaryXAxis.getPositionValue(e.x, false);
+				double y = xyGraph.primaryYAxis.getPositionValue(e.y, false);
+				if (x < 0 || y < 0) {
+					return;
 				}
-				gc.dispose();
-				image.dispose();
+				double minDistance = 30.0d;
+				long time = 0;
+				double value = 0;
+				Trace t = xyGraph.getPlotArea().getTraceList().get(0);
+				if (t == null) {
+					return;
+				}
+				ISample s = getNearestPoint(t.getDataProvider(), x);
+				if (s != null) {
+					int x2 = xyGraph.primaryXAxis.getValuePosition(s.getXValue(), false);
+					int y2 = xyGraph.primaryYAxis.getValuePosition(s.getYValue(), false);
+					double distance = ScouterUtil.getPointDistance(e.x, e.y, x2, y2);
+					if (minDistance > distance) {
+						minDistance = distance;
+						time = (long) s.getXValue();
+						value = s.getYValue();
+					}
+				}
+				if (t != null) {
+					toolTip.setText("Time : " + DateUtil.format(time, "HH:mm:ss")
+							+ "\nValue : " +  FormatUtil.print(value, "#,###.##"));
+					toolTip.show(new Point(e.x, e.y));
+				}
 			}
 
 			public void mouseDoubleClick(MouseEvent e) {
@@ -524,6 +519,46 @@ public class ScouterUtil {
 			}
 		}
 	}
+	
+	public static ISample getNearestPoint(IDataProvider provider, double time) {
+		int high = provider.getSize() - 1;
+		int low = 0;
+		while (high >= low) {
+			int mid = (high + low) / 2;
+			ISample s = provider.getSample(mid);
+			double x = s.getXValue();
+			if (x == time) {
+				return s;
+			} else {
+				if (x > time) {
+					high = mid;
+				} else {
+					low = mid;
+				}
+				if ((high - low) <= 1) {
+					ISample highSample = provider.getSample(high);
+					ISample lowSample = provider.getSample(low);
+					if (highSample == null && lowSample == null) {
+						return null;
+					}
+					if (highSample == null) {
+						return lowSample;
+					}
+					if (lowSample == null) {
+						return highSample;
+					}
+					double highGap = highSample.getXValue() - time;
+					double lowGqp = time - lowSample.getXValue();
+					if (highGap < lowGqp) {
+						return highSample;
+					} else {
+						return lowSample;
+					}
+				}
+			}
+		}
+		return null;
+	}
 
 	public static String humanReadableByteCount(long bytes, boolean si) {
 		int unit = 1024;
@@ -543,23 +578,23 @@ public class ScouterUtil {
 		return String.format("%.1f %s", bytes / Math.pow(unit, exp), pre);
 	}
 	
-	public static void detachView(ViewPart part) {
-		String id = part.getViewSite().getId();
-		String secId = part.getViewSite().getSecondaryId();
-		if (DetachedManager.getInstance().isInitialView(id, secId)) {
-			DetachedManager.getInstance().registerOpend(id, secId);
-			IViewReference ref = part.getSite().getPage().findViewReference(id, secId);
-			if (ref == null) return;
-			((WorkbenchPage) part.getSite().getPage()).getActivePerspective().getPresentation().detachPart(ref); 
-//			Monitor primaryMonitor = Display.getDefault().getPrimaryMonitor();
-//			Rectangle bounds = primaryMonitor.getBounds();
-//			part.getViewSite().getShell().setSize(bounds.width / 2, bounds.height / 2);
-		}
-	}
-	
 	public static void addHorizontalRangeListener(PlotArea plotArea, PropertyChangeListener listener, boolean withZoom) {
 		plotArea.setZoomType(ZoomType.HORIZONTAL_ZOOM);
 		plotArea.enableZoom(withZoom);
 		plotArea.addPropertyChangeListener("horizontal_range", listener);
 	}
+	
+	public static double getPointDistance(double x1, double y1, double x2, double y2) {
+		return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+	}
+	
+	public static DoubleFunction<Comparator<Trace>> comparatorByTime = (time) -> (t1, t2) -> {
+		ISample sample1 = ScouterUtil.getNearestPoint(t1.getDataProvider(), time);
+		ISample sample2 = ScouterUtil.getNearestPoint(t2.getDataProvider(), time);
+		return Double.compare(sample2.getYValue(), sample1.getYValue());
+	};
+
+   public static ToDoubleFunction<Trace> nearestPointYValueFunc(double time) {
+	   return t -> ScouterUtil.getNearestValue(t.getDataProvider(), time);
+   }
 }

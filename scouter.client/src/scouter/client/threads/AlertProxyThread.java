@@ -27,11 +27,11 @@ import scouter.client.net.INetReader;
 import scouter.client.net.TcpProxy;
 import scouter.client.server.ServerManager;
 import scouter.client.util.ConsoleProxy;
+import scouter.io.DataInputX;
 import scouter.lang.pack.AlertPack;
 import scouter.lang.pack.MapPack;
 import scouter.lang.pack.Pack;
 import scouter.lang.value.BooleanValue;
-import scouter.io.DataInputX;
 import scouter.net.RequestCmd;
 import scouter.util.ThreadUtil;
 
@@ -86,7 +86,7 @@ public class AlertProxyThread extends Thread {
 								MapPack param = (MapPack) packet;
 								paramMap.put(serverId, param);
 							} else {
-								AlertPack alert = (AlertPack) packet;
+								final AlertPack alert = (AlertPack) packet;
 								for (IAlertListener listener : listeners) {
 									listener.ariseAlert(serverId, alert);
 								}

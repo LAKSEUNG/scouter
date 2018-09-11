@@ -20,7 +20,6 @@ package scouter.client;
 import org.eclipse.ui.IFolderLayout;
 import org.eclipse.ui.IPageLayout;
 import org.eclipse.ui.IPerspectiveFactory;
-import org.eclipse.ui.IPlaceholderFolderLayout;
 
 import scouter.client.counter.views.CounterRealTimeAllView;
 import scouter.client.counter.views.CounterRealTimeTotalView;
@@ -31,16 +30,10 @@ import scouter.client.server.Server;
 import scouter.client.server.ServerManager;
 import scouter.client.views.AlertView;
 import scouter.client.views.EQView;
-import scouter.client.views.ObjectActiveServiceListView;
 import scouter.client.views.ObjectDailyListView;
 import scouter.client.views.ObjectNavigationView;
-import scouter.client.views.ObjectThreadDetailView;
 import scouter.client.views.WorkspaceExplorer;
-import scouter.client.xlog.views.XLogDependencyView;
-import scouter.client.xlog.views.XLogProfileView;
 import scouter.client.xlog.views.XLogRealTimeView;
-import scouter.client.xlog.views.XLogSelectionView;
-import scouter.client.xlog.views.XLogZoomTimeView;
 import scouter.lang.counters.CounterConstants;
 
 public class PerspectiveService implements IPerspectiveFactory  {
@@ -67,15 +60,17 @@ public class PerspectiveService implements IPerspectiveFactory  {
 		agentLayout.addPlaceholder(GroupNavigationView.ID);
 		agentLayout.addView(ObjectNavigationView.ID);
 		layout.getViewLayout(ObjectNavigationView.ID).setCloseable(false); 
-		 
-		IFolderLayout eqLayout = layout.createFolder(IConstants.LAYOUT_WASSERVICE_ALERT, IPageLayout.BOTTOM, 0.5f, IConstants.LAYOUT_WASSERVICE_OBJECT_NAVIGATION);
-		eqLayout.addPlaceholder(AlertView.ID);
+		
+		IFolderLayout eqLayout = layout.createFolder(IConstants.LAYOUT_WASSERVICE_EQ, IPageLayout.BOTTOM, 0.5f, IConstants.LAYOUT_WASSERVICE_OBJECT_NAVIGATION);
 		eqLayout.addPlaceholder(EQView.ID + ":*");
 		eqLayout.addView(EQView.ID + ":" + serverId +"&"+ objType); // 1
 
-		IFolderLayout cpuLayout = layout.createFolder(IConstants.LAYOUT_WASSERVICE_CPU, IPageLayout.BOTTOM, 0.5f, IConstants.LAYOUT_WASSERVICE_ALERT);
+		IFolderLayout cpuLayout = layout.createFolder(IConstants.LAYOUT_WASSERVICE_CPU, IPageLayout.BOTTOM, 0.5f, IConstants.LAYOUT_WASSERVICE_EQ);
 		cpuLayout.addView(CounterRealTimeAllView.ID + ":" + serverId + "&" + host + "&" + CounterConstants.HOST_CPU);
-
+		
+		IFolderLayout alertLayout = layout.createFolder(IConstants.LAYOUT_WASSERVICE_ALERT, IPageLayout.BOTTOM, 0.5f, IConstants.LAYOUT_WASSERVICE_OBJECT_NAVIGATION);
+		alertLayout.addPlaceholder(AlertView.ID + ":*");
+		alertLayout.addView(AlertView.ID);
 		
 		IFolderLayout upResLayout = layout.createFolder(IConstants.LAYOUT_WASSERVICE_LEFT_TOP, IPageLayout.LEFT, 0.3f, editorArea);
 		upResLayout.addView(CounterRealTimeAllView.ID + ":" + serverId + "&" + objType + "&" + CounterConstants.WAS_RECENT_USER);
